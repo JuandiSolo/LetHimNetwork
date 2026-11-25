@@ -34,6 +34,9 @@ export abstract class BaseLabScene extends Phaser.Scene {
   protected ports = new Map<string, PortInfo>();    // key: 'PC-1:NIC' -> PortInfo
   protected drag: { start: PortInfo; x: number; y: number } | null = null;
   private unsub?: () => void;
+  private cableGraphics?: any;        // Reusable graphics for all cables
+  private dragGraphics?: any;         // Reusable graphics for drag preview
+  private portGraphics?: any;         // Reusable graphics for ports
 
   protected get state() { return gameStore.getState(); }
 
@@ -44,12 +47,23 @@ export abstract class BaseLabScene extends Phaser.Scene {
     this.scale.on('resize', () => { this.dirty = true; });
     this.events.once('shutdown', () => { this.unsub?.(); this.scale.off('resize'); });
     this.setupInput();
+
+    // Create reusable graphics objects ONCE
+    this.cableGraphics = this.add.graphics();
+    this.cableGraphics.setDepth(5); // Above devices
+    this.dragGraphics = this.add.graphics();
+    this.dragGraphics.setDepth(10); // Above cables
+    this.portGraphics = this.add.graphics();
+    this.portGraphics.setDepth(1); // Above device boxes
   }
 
   update() {
     if (!this.dirty && !this.drag) return;
     this.dirty = false;
     this.children.removeAll(true);
+    this.cableGraphics?.clear();
+    this.dragGraphics?.clear();
+    this.portGraphics?.clear();
     this.ports.clear();
     this.buildLayout();
     this.drawCables();
@@ -57,11 +71,12 @@ export abstract class BaseLabScene extends Phaser.Scene {
   }
 
   protected drawDragPreview() {
-    if (!this.drag) return;
+    if (!this.drag || !this.dragGraphics) return;
+    const g = this.dragGraphics;
+    g.clear();
     const start = this.drag.start;
     const end = { x: this.drag.x, y: this.drag.y };
     const color = this.getCableColor(this.state.selectedCable);
-    const g = this.add.graphics();
     g.lineStyle(3, color, 0.6);
     this.drawBezier(g, start.x, start.y, end.x, end.y);
     // End point indicator
@@ -90,21 +105,23 @@ export abstract class BaseLabScene extends Phaser.Scene {
     const key = `${p.deviceId}:${p.portName}`;
     this.ports.set(key, p);
 
-    // Visual port indicator
-    const color = this.getPortColor(p);
-    const occupied = this.isOccupied(p.deviceId, p.portName);
-    const g = this.add.graphics();
-    g.lineStyle(2, occupied ? 0xff4444 : color, 1);
-    g.fillStyle(occupied ? 0xff4444 : color, occupied ? 0.3 : 0.1);
-    g.strokeCircle(p.x, p.y, 8);
-    g.fillCircle(p.x, p.y, 6);
+    // Visual port indicator (use reusable graphics)
+    if (this.portGraphics) {
+      const color = this.getPortColor(p);
+      const occupied = this.isOccupied(p.deviceId, p.portName);
+      const g = this.portGraphics;
+      g.lineStyle(2, occupied ? 0xff4444 : color, 1);
+      g.fillStyle(occupied ? 0xff4444 : color, occupied ? 0.3 : 0.1);
+      g.strokeCircle(p.x, p.y, 8);
+      g.fillCircle(p.x, p.y, 6);
+    }
 
     // Port label
     this.add.text(p.x, p.y - 18, p.portName, {
       fontFamily: 'monospace',
       fontSize: '10px',
       color: '#888',
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setDepth(2);
 
     // Interactive zone for drag
     const zone = this.add.zone(p.x - 12, p.y - 12, 24, 24);
@@ -222,6 +239,10 @@ export abstract class BaseLabScene extends Phaser.Scene {
   // ---- Cable rendering ----
 
   protected drawCables() {
+    if (!this.cableGraphics) return;
+    const g = this.cableGraphics;
+    g.clear();
+
     const cables = this.state.cables;
     for (const cable of cables) {
       if (!cable.endA || !cable.endB) continue;
@@ -232,16 +253,19 @@ export abstract class BaseLabScene extends Phaser.Scene {
       if (!start || !end) continue; // One end not in this view - don't draw
 
       const color = parseInt(cable.color.replace('#', ''), 16);
-      const g = this.add.graphics();
       g.lineStyle(cable.seated ? 3 : 2, color, cable.seated ? 1 : 0.5);
       if (!cable.seated) g.setLineStyle(2, color, 0.5, 1, [5, 5]);
 
       // Quadratic bezier curve (manual, Phaser 4 Graphics doesn't have quadraticCurveTo)
       this.drawBezier(g, start.x, start.y, end.x, end.y);
 
-      // Cable label at midpoint
+      // LED indicator at midpoint
       const cx = (start.x + end.x) / 2;
       const cy = Math.min(start.y, end.y) - 40;
+      g.fillStyle(cable.seated ? 0x00ff00 : 0xff0000, 1);
+      g.fillCircle(cx, cy, 6);
+
+      // Cable label at midpoint
       const labelX = (start.x + end.x) / 2;
       const labelY = cy - 8;
       this.add.text(labelX, labelY, cable.type.charAt(0).toUpperCase(), {
@@ -250,7 +274,7 @@ export abstract class BaseLabScene extends Phaser.Scene {
         color: '#fff',
         backgroundColor: cable.color + 'AA',
         padding: { x: 4, y: 1 },
-      }).setOrigin(0.5);
+      }).setOrigin(0.5).setDepth(6);
     }
   }
 
