@@ -62,6 +62,9 @@ export interface PortId {
 
 export type CableType = 'straight' | 'crossover' | 'usbEthernet';
 
+export type PcId = 'PC-1' | 'PC-2';
+export type LabView = 'CAGE' | 'PC' | 'TERMINAL';
+
 export interface Cable {
   id: string;
   type: CableType;
@@ -71,7 +74,7 @@ export interface Cable {
   seated: boolean;        // Physical connection quality (2% failure rate)
 }
 
-export type GamePhase = 'HOME' | 'SELECT_TOPOLOGY' | 'QUIZ' | 'TOOLS' | 'LAB' | 'DESKTOP' | 'PC_CABLES' | 'PC_TERMINAL' | 'REVIEW' | 'FEEDBACK';
+export type GamePhase = 'HOME' | 'SELECT_TOPOLOGY' | 'QUIZ' | 'TOOLS' | 'LAB' | 'REVIEW' | 'FEEDBACK';
 
 // Action types - exported for reducer and store
 export const ActionType = {
@@ -85,7 +88,10 @@ export const ActionType = {
   SET_PC_CONFIG: 'SET_PC_CONFIG',
   ADVANCE_CLOCK: 'ADVANCE_CLOCK',
   RESET_GAME: 'RESET_GAME',
-  SET_ACTIVE_TERMINAL_PC: 'SET_ACTIVE_TERMINAL_PC',
+  OPEN_CAGE: 'OPEN_CAGE',
+  OPEN_PC: 'OPEN_PC',
+  OPEN_TERMINAL: 'OPEN_TERMINAL',
+  SELECT_CABLE: 'SELECT_CABLE',
 } as const;
 
 export type ActionTypeValue = typeof ActionType[keyof typeof ActionType];
@@ -101,7 +107,9 @@ export interface GameState {
   pcs: PCState[];
   clock: number;
   actions: GameAction[];
-  activeTerminalPC: 'PC-1' | 'PC-2' | null;
+  labView: LabView;
+  activePc: PcId;
+  selectedCable: CableType;
 }
 
 export interface PhysicalAssignment {

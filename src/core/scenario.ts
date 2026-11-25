@@ -3,7 +3,9 @@
  * Pure data - no side effects.
  */
 
-import type { PhysicalAssignment, PatchTermination } from './types';
+import type { PhysicalAssignment, PatchTermination, PcId } from './types';
+
+export type { PhysicalAssignment, PatchTermination };
 
 // Logical topology for T1 - matches PDF page 3 exactly
 export const TOPOLOGY_T1 = {
@@ -193,3 +195,16 @@ function mulberry32(a: number) {
 }
 
 export type CableTypeKey = keyof typeof CABLE_INVENTORY_T1;
+
+/**
+ * Gets the patch panel letter for a given PC from physical assignment.
+ * The patch panels PP-1 and PP-2 are the SAME logical device in cage and PC views.
+ */
+export function panelLetterOf(pc: PcId, pa: PhysicalAssignment): string {
+  const physical = pa.pcRoles[pc]; // e.g., 'PC 5'
+  const match = physical.match(/PC\s+(\d+)/);
+  if (!match) return 'A'; // fallback
+  const pcNum = parseInt(match[1], 10);
+  // Letters assigned cyclically A-H for 8 PCs
+  return String.fromCharCode(65 + ((pcNum - 1) % 8)); // A=65
+}

@@ -1,27 +1,38 @@
 /**
- * PC Terminal View - Full screen terminal + config for selected PC.
- * Reached from PC_CABLES view by clicking on a PC.
+ * PC Terminal View - Full screen terminal + IP config for active PC.
+ * Shown when labView === 'TERMINAL' as React overlay.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { usePCs, useGameStore, dispatch } from '@app/store';
+import type { PcId } from '@core/types';
 
-export function PcTerminalView(): React.ReactElement | null {
-  // Hooks MUST be called unconditionally at the top
-  const phase = useGameStore(s => s.phase);
+interface PcTerminalViewProps {
+  lines: Record<PcId, string[]>;
+  setLines: React.Dispatch<React.SetStateAction<Record<PcId, string[]>>>;
+}
+
+export function PcTerminalView({ lines, setLines }: PcTerminalViewProps) {
+  const activePc = useGameStore(s => s.activePc);
   const pcs = usePCs();
-  const activeTerminalPC = useGameStore(s => s.activeTerminalPC);
 
-  const [terminalOutput, setTerminalOutput] = useState<string[]>([
-    'Bienvenido a la consola.',
-    'Conecte el cable de consola (USB → Parrilla → Router Console) y presione Enter.',
-  ]);
+  // Sync local lines state with props (kept in LabShell for per-PC history)
+  const [terminalOutput, setTerminalOutput] = useState<string[]>([]);
   const [commandInput, setCommandInput] = useState('');
 
-  // Early return AFTER hooks
-  if (phase !== 'PC_TERMINAL' || !activeTerminalPC) return null;
+  // Load history when activePc changes
+  useEffect(() => {
+    setTerminalOutput(lines[activePc] || []);
+  }, [activePc, lines]);
 
-  const pcState = pcs.find(p => p.id === activeTerminalPC);
+  // Save history when output changes
+  useEffect(() => {
+    if (terminalOutput.length > 0) {
+      setLines(prev => ({ ...prev, [activePc]: terminalOutput }));
+    }
+  }, [terminalOutput, activePc, setLines]);
+
+  const pcState = pcs.find(p => p.id === activePc);
 
   const handleCommand = (cmd: string) => {
     setTerminalOutput(prev => [...prev, `> ${cmd}`]);
@@ -54,42 +65,59 @@ export function PcTerminalView(): React.ReactElement | null {
     }
   };
 
-  const handleBack = () => {
-    dispatch.setActiveTerminalPC(null);
-    dispatch.setPhase('PC_CABLES');
+  const handleExit = () => {
+    dispatch.openPc(activePc); // Back to PC view, keeps activePc
   };
 
   return (
-    <div className="pc-terminal-view">
-      <div className="terminal-header">
-        <div className="header-left">
-          <button className="btn-secondary btn-sm" onClick={handleBack}>
-            ← Volver a Cableado
-          </button>
-          <h2>Terminal - {activeTerminalPC}</h2>
-        </div>
-        <div className="header-right">
-          <span className="com-info">COM{pcState?.comPort} | {pcState?.ip}</span>
-        </div>
-      </div>
-
-      <div className="terminal-container">
-        <div className="terminal">
-          <div className="terminal-output">
-            {terminalOutput.map((line, i) => (
-              <div key={i} className="terminal-line">{line}</div>
-            ))}
+    <div className='terminal-overlay'>
+      <div className='terminal-container'>
+        {/* Left panel: IP Config */}
+        <div className='terminal-ip-panel'>
+          <h3>Configuración IP - {activePc}</h3>
+          <div className='config-grid'>
+            <label>
+              <span>Dirección IP</span>
+              <input type='text' value={pcState?.ip || ''} readOnly />
+            </label>
+            <label>
+              <span>Máscara</span>
+              <input type='text' value={pcState?.mask || ''} readOnly />
+            </label>
+            <label>
+              <span>Puerta de enlace</span>
+              <input type='text' value={pcState?.gateway || ''} readOnly />
+            </label>
+            <label>
+              <span>Puerto COM</span>
+              <input type='text' value={`COM${pcState?.comPort || ''}`} readOnly />
+            </label>
           </div>
-          <div className="terminal-input-line">
-            <span className="prompt">{activeTerminalPC + '>'}</span>
-            <input
-              type="text"
-              value={commandInput}
-              onChange={e => setCommandInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              autoFocus
-              placeholder="Escriba comando (ping, ipconfig, help, clear)..."
-            />
+        </div>
+
+        {/* Right panel: Terminal */}
+        <div className='terminal-main'>
+          <div className='terminal-header'>
+            <h3>{activePc} - Terminal</h3>
+            <button className='btn-secondary btn-sm' onClick={handleExit}>Salir</button>
+          </div>
+          <div className='terminal'>
+            <div className='terminal-output'>
+              {terminalOutput.map((line, i) => (
+                <div key={i} className='terminal-line'>{line}</div>
+              ))}
+            </div>
+            <div className='terminal-input-line'>
+              <span className='prompt'>{`${activePc}>`}</span>
+              <input
+                type='text'
+                value={commandInput}
+                onChange={e => setCommandInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                autoFocus
+                placeholder='Escriba comando (ping, ipconfig, help, clear)...'
+              />
+            </div>
           </div>
         </div>
       </div>

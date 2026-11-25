@@ -68,6 +68,9 @@ export const useCables = () => useGameStore(s => s.cables);
 export const useConsoleLink = () => useGameStore(s => s.consoleLink);
 export const usePCs = () => useGameStore(s => s.pcs);
 export const useSeed = () => useGameStore(s => s.seed);
+export const useLabView = () => useGameStore(s => s.labView);
+export const useActivePc = () => useGameStore(s => s.activePc);
+export const useSelectedCable = () => useGameStore(s => s.selectedCable);
 
 // Action dispatchers (convenience)
 export const dispatch = {
@@ -89,6 +92,12 @@ export const dispatch = {
     gameStore.dispatch(actions.setPCConfig(pcId, ip, mask, gateway)),
   resetGame: (seed: number) =>
     gameStore.dispatch(actions.resetGame(seed)),
-  setActiveTerminalPC: (pcId: 'PC-1' | 'PC-2' | null) =>
-    gameStore.dispatch(actions.setActiveTerminalPC(pcId)),
+  openCage: () =>
+    gameStore.dispatch(actions.openCage()),
+  openPc: (pcId: 'PC-1' | 'PC-2') =>
+    gameStore.dispatch(actions.openPc(pcId)),
+  openTerminal: () =>
+    gameStore.dispatch(actions.openTerminal()),
+  selectCable: (cableType: 'straight' | 'crossover' | 'usbEthernet') =>
+    gameStore.dispatch(actions.selectCable(cableType)),
 };

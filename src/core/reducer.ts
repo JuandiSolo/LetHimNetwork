@@ -10,10 +10,13 @@ import type {
   Cable,
   PCState,
   PortId,
+  CableType,
+  PcId,
+  LabView,
 } from './types';
 import { ActionType } from './types';
 import { deriveAddresses } from './addressing';
-import { createPhysicalAssignment } from './scenario';
+import { createPhysicalAssignment, CABLE_INVENTORY_T1 } from './scenario';
 
 // Initial state
 export const initialState: GameState = {
@@ -27,8 +30,17 @@ export const initialState: GameState = {
   pcs: [],
   clock: 0,
   actions: [],
-  activeTerminalPC: null,
+  labView: 'CAGE',
+  activePc: 'PC-1',
+  selectedCable: 'straight',
 };
+
+// Helper to calculate remaining cables
+function remainingCables(cables: Cable[]): Record<CableType, number> {
+  const r: Record<CableType, number> = { ...CABLE_INVENTORY_T1 };
+  for (const c of cables) r[c.type] -= 1;
+  return r;
+}
 
 // Reducer
 export function gameReducer(state: GameState, action: GameAction): GameState {
@@ -75,6 +87,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         cables: [],
         consoleLink: null,
         clock: 0,
+        labView: 'CAGE',
+        activePc: 'PC-1',
+        selectedCable: 'straight',
         actions: [{ ...action, actionId: 0, gameTick: 0 }],
       };
     }
@@ -93,6 +108,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       // Check port availability
       if (isPortOccupied(state.cables, cable.endA) || isPortOccupied(state.cables, cable.endB)) {
         return state; // Port busy - handled in UI
+      }
+      // Check cable inventory
+      const remaining = remainingCables(state.cables);
+      if (remaining[cable.type] <= 0) {
+        return state; // No cables of this type left
       }
       return {
         ...state,
@@ -181,12 +201,36 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       };
     }
 
-    case ActionType.SET_ACTIVE_TERMINAL_PC: {
-      const { pcId } = action.payload as { pcId: 'PC-1' | 'PC-2' | null };
+    case ActionType.OPEN_CAGE: {
       return {
         ...state,
-        activeTerminalPC: pcId,
-        actions: [...state.actions, { ...action, actionId: state.actions.length, gameTick: state.clock }],
+        labView: 'CAGE',
+        // Note: navigation actions not recorded in actions[] per spec
+      };
+    }
+
+    case ActionType.OPEN_PC: {
+      const { pcId } = action.payload as { pcId: PcId };
+      return {
+        ...state,
+        labView: 'PC',
+        activePc: pcId,
+      };
+    }
+
+    case ActionType.OPEN_TERMINAL: {
+      return {
+        ...state,
+        labView: 'TERMINAL',
+        // Uses activePc from state
+      };
+    }
+
+    case ActionType.SELECT_CABLE: {
+      const { cableType } = action.payload as { cableType: CableType };
+      return {
+        ...state,
+        selectedCable: cableType,
       };
     }
 
@@ -282,9 +326,30 @@ export const actions = {
     gameTick: 0,
   }),
 
-  setActiveTerminalPC: (pcId: 'PC-1' | 'PC-2' | null): GameAction => ({
-    type: ActionType.SET_ACTIVE_TERMINAL_PC,
+  openCage: (): GameAction => ({
+    type: ActionType.OPEN_CAGE,
+    payload: {},
+    actionId: 0,
+    gameTick: 0,
+  }),
+
+  openPc: (pcId: PcId): GameAction => ({
+    type: ActionType.OPEN_PC,
     payload: { pcId },
+    actionId: 0,
+    gameTick: 0,
+  }),
+
+  openTerminal: (): GameAction => ({
+    type: ActionType.OPEN_TERMINAL,
+    payload: {},
+    actionId: 0,
+    gameTick: 0,
+  }),
+
+  selectCable: (cableType: CableType): GameAction => ({
+    type: ActionType.SELECT_CABLE,
+    payload: { cableType },
     actionId: 0,
     gameTick: 0,
   }),
