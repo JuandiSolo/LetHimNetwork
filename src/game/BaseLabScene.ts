@@ -47,12 +47,41 @@ export abstract class BaseLabScene extends Phaser.Scene {
   }
 
   update() {
-    if (!this.dirty) return;
+    if (!this.dirty && !this.drag) return;
     this.dirty = false;
     this.children.removeAll(true);
     this.ports.clear();
     this.buildLayout();
     this.drawCables();
+    this.drawDragPreview();
+  }
+
+  protected drawDragPreview() {
+    if (!this.drag) return;
+    const start = this.drag.start;
+    const end = { x: this.drag.x, y: this.drag.y };
+    const color = this.getCableColor(this.state.selectedCable);
+    const g = this.add.graphics();
+    g.lineStyle(3, color, 0.6);
+    this.drawBezier(g, start.x, start.y, end.x, end.y);
+    // End point indicator
+    g.fillStyle(color, 0.6);
+    g.fillCircle(end.x, end.y, 8);
+  }
+
+  protected drawBezier(g: any, x1: number, y1: number, x2: number, y2: number) {
+    const cx = (x1 + x2) / 2;
+    const cy = Math.min(y1, y2) - 40;
+    g.beginPath();
+    g.moveTo(x1, y1);
+    const segments = 20;
+    for (let i = 1; i <= segments; i++) {
+      const t = i / segments;
+      const x = (1 - t) * (1 - t) * x1 + 2 * (1 - t) * t * cx + t * t * x2;
+      const y = (1 - t) * (1 - t) * y1 + 2 * (1 - t) * t * cy + t * t * y2;
+      g.lineTo(x, y);
+    }
+    g.strokePath();
   }
 
   // ---- Port management ----
@@ -207,15 +236,12 @@ export abstract class BaseLabScene extends Phaser.Scene {
       g.lineStyle(cable.seated ? 3 : 2, color, cable.seated ? 1 : 0.5);
       if (!cable.seated) g.setLineStyle(2, color, 0.5, 1, [5, 5]);
 
-      // Quadratic bezier curve
+      // Quadratic bezier curve (manual, Phaser 4 Graphics doesn't have quadraticCurveTo)
+      this.drawBezier(g, start.x, start.y, end.x, end.y);
+
+      // Cable label at midpoint
       const cx = (start.x + end.x) / 2;
       const cy = Math.min(start.y, end.y) - 40;
-      g.beginPath();
-      g.moveTo(start.x, start.y);
-      g.quadraticCurveTo(cx, cy, end.x, end.y);
-      g.strokePath();
-
-      // Cable label
       const labelX = (start.x + end.x) / 2;
       const labelY = cy - 8;
       this.add.text(labelX, labelY, cable.type.charAt(0).toUpperCase(), {
