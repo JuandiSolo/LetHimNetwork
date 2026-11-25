@@ -60,10 +60,15 @@ export abstract class BaseLabScene extends Phaser.Scene {
   update() {
     if (!this.dirty && !this.drag) return;
     this.dirty = false;
-    this.children.removeAll(true);
+    // Clear reusable graphics (don't destroy them!)
     this.cableGraphics?.clear();
     this.dragGraphics?.clear();
     this.portGraphics?.clear();
+    // Remove only device graphics, texts, zones (not the reusable graphics)
+    const toDestroy = this.children.list.filter((child: any) =>
+      child !== this.cableGraphics && child !== this.dragGraphics && child !== this.portGraphics
+    );
+    toDestroy.forEach((child: any) => child.destroy());
     this.ports.clear();
     this.buildLayout();
     this.drawCables();
