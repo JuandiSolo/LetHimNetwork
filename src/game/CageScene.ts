@@ -61,6 +61,9 @@ export class CageScene extends Phaser.Scene {
   private selectedCableType: 'straight' | 'crossover' | 'usbEthernet' = 'straight';
   private hoveredPort: PortInfo | null = null;
 
+  // Cable removal: right-click on cable
+  private cableHitAreas: Array<{ cable: Cable; graphics: PhaserGraphics; points: { x: number; y: number }[] }> = [];
+
   // Port occupation tracking
   private occupiedPorts: Set<string> = new Set();
 
@@ -96,6 +99,7 @@ export class CageScene extends Phaser.Scene {
 
     // Create cable graphics LAST so cables render ON TOP of devices
     this.cableGraphics = this.add.graphics({ x: 0, y: 0 });
+    this.cableGraphics.setDepth(5); // Cables on top of devices (depth 0)
     if (this.physicalAssignment) {
       this.renderCables();
     }
@@ -166,6 +170,18 @@ export class CageScene extends Phaser.Scene {
     // Escape to cancel cable
     this.input.keyboard?.on('keydown-ESC', () => { this.cancelCable(); });
 
+    // Cable removal: right-click on cable
+    this.input.on('pointerdown', (pointer: PhaserPointer) => {
+      // Right-click on cable to remove
+      if (pointer.rightButtonDown() && !this.cableInProgress && !pointer.middleButtonDown()) {
+        const hitCable = this.getCableAtPosition(pointer.worldX, pointer.worldY);
+        if (hitCable) {
+          this.removeCable(hitCable.id);
+          return; // Don't start pan
+        }
+      }
+    });
+
     // Global pointerup to complete cable connection
     this.input.on('pointerup', (pointer: PhaserPointer) => {
       if (this.cableInProgress) {
@@ -221,6 +237,47 @@ export class CageScene extends Phaser.Scene {
     this.renderCableTypeIndicator();
   }
 
+  private renderCablePreview(): void {
+    if (!this.cableInProgress) return;
+
+    this.previewGraphics.clear();
+    this.previewGraphics.setDepth(10); // Preview on top
+
+    const start = this.cableInProgress.startPort;
+    const end = this.cableInProgress.currentPos;
+
+    // Color by cable type
+    const colors: Record<string, number> = {
+      straight: 0x00ff00,
+      crossover: 0xff8800,
+      usbEthernet: 0x00ffff,
+    };
+
+    const color = colors[this.cableInProgress.type] || 0xffffff;
+
+    // Draw curved cable using line segments (Phaser 4 Graphics doesn't have quadraticCurveTo)
+    this.previewGraphics.lineStyle(3, color, 0.6);
+    this.previewGraphics.beginPath();
+    this.previewGraphics.moveTo(start.x, start.y);
+
+    // Simulate curve with multiple line segments
+    const midX = (start.x + end.x) / 2;
+    const midY = (start.y + end.y) / 2 - 50;
+    const segments = 10;
+    for (let i = 1; i <= segments; i++) {
+      const t = i / segments;
+      // Quadratic bezier formula
+      const x = (1 - t) * (1 - t) * start.x + 2 * (1 - t) * t * midX + t * t * end.x;
+      const y = (1 - t) * (1 - t) * start.y + 2 * (1 - t) * t * midY + t * t * end.y;
+      this.previewGraphics.lineTo(x, y);
+    }
+    this.previewGraphics.strokePath();
+
+    // End point indicator
+    this.previewGraphics.fillStyle(color, 0.6);
+    this.previewGraphics.fillCircle(end.x, end.y, 8);
+  }
+
   setCableType(type: 'straight' | 'crossover' | 'usbEthernet'): void {
     this.selectedCableType = type;
     this.renderCableTypeIndicator();
@@ -264,9 +321,10 @@ export class CageScene extends Phaser.Scene {
   }
 
   private renderCage(): void {
-    // Background grid
+    // Background grid - lowest depth
     const graphics = this.add.graphics();
     graphics.lineStyle(1, 0x333333, 0.3);
+    graphics.setDepth(-10);
     for (let x = 0; x <= 1600; x += 50) {
       graphics.moveTo(x, 0);
       graphics.lineTo(x, 1000);
@@ -280,6 +338,7 @@ export class CageScene extends Phaser.Scene {
     // Cage outline
     const cage = this.add.graphics();
     cage.lineStyle(3, 0x666666, 1);
+    cage.setDepth(-5);
     cage.strokeRect(100, 100, 1400, 800);
 
     // Label
@@ -287,7 +346,7 @@ export class CageScene extends Phaser.Scene {
       fontSize: '24px',
       color: '#ffffff',
       fontFamily: 'monospace',
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setDepth(-5);
   }
 
   private renderDevices(): void {
@@ -326,13 +385,14 @@ export class CageScene extends Phaser.Scene {
 
   private renderPC(role: string, physicalId: string, x: number, y: number): void {
     const g = this.add.graphics();
+    g.setDepth(0); // Devices at depth 0
     g.fillStyle(0x4444aa, 1);
     g.fillRoundedRect(x - 60, y - 40, 120, 80, 8);
     g.lineStyle(2, 0x6666cc, 1);
     g.strokeRoundedRect(x - 60, y - 40, 120, 80, 8);
 
-    this.add.text(x, y - 15, role, { fontSize: '16px', color: '#fff', fontFamily: 'monospace' }).setOrigin(0.5);
-    this.add.text(x, y + 10, physicalId, { fontSize: '12px', color: '#aaa', fontFamily: 'monospace' }).setOrigin(0.5);
+    this.add.text(x, y - 15, role, { fontSize: '16px', color: '#fff', fontFamily: 'monospace' }).setOrigin(0.5).setDepth(1);
+    this.add.text(x, y + 10, physicalId, { fontSize: '12px', color: '#aaa', fontFamily: 'monospace' }).setOrigin(0.5).setDepth(1);
 
     // NIC port (right side)
     const nicZone = this.add.zone(x + 60, y - 15, 20, 20);
@@ -340,7 +400,7 @@ export class CageScene extends Phaser.Scene {
     nicZone.setData({ deviceId: role, portName: 'NIC', type: 'ethernet' });
     this.setupPortZone(nicZone, role, 'NIC', 'ethernet', x + 60, y - 15);
     this.portZones.set(`${role}:NIC`, nicZone);
-    this.add.text(x + 60, y - 35, 'NIC', { fontSize: '8px', color: '#888', fontFamily: 'monospace' }).setOrigin(0.5);
+    this.add.text(x + 60, y - 35, 'NIC', { fontSize: '8px', color: '#888', fontFamily: 'monospace' }).setOrigin(0.5).setDepth(1);
 
     // USB port (for console cable, right side below NIC)
     const usbZone = this.add.zone(x + 60, y + 15, 20, 20);
@@ -348,20 +408,21 @@ export class CageScene extends Phaser.Scene {
     usbZone.setData({ deviceId: role, portName: 'USB', type: 'usb' });
     this.setupPortZone(usbZone, role, 'USB', 'usb', x + 60, y + 15);
     this.portZones.set(`${role}:USB`, usbZone);
-    this.add.text(x + 60, y + 35, 'USB', { fontSize: '8px', color: '#888', fontFamily: 'monospace' }).setOrigin(0.5);
+    this.add.text(x + 60, y + 35, 'USB', { fontSize: '8px', color: '#888', fontFamily: 'monospace' }).setOrigin(0.5).setDepth(1);
 
     this.deviceGraphics.set(role, g);
   }
 
   private renderSwitch(physicalId: string, x: number, y: number): void {
     const g = this.add.graphics();
+    g.setDepth(0);
     g.fillStyle(0x44aa44, 1);
     g.fillRoundedRect(x - 100, y - 30, 200, 60, 6);
     g.lineStyle(2, 0x66cc66, 1);
     g.strokeRoundedRect(x - 100, y - 30, 200, 60, 6);
 
-    this.add.text(x, y - 10, 'SWITCH', { fontSize: '14px', color: '#fff', fontFamily: 'monospace' }).setOrigin(0.5);
-    this.add.text(x, y + 10, physicalId, { fontSize: '11px', color: '#aaa', fontFamily: 'monospace' }).setOrigin(0.5);
+    this.add.text(x, y - 10, 'SWITCH', { fontSize: '14px', color: '#fff', fontFamily: 'monospace' }).setOrigin(0.5).setDepth(1);
+    this.add.text(x, y + 10, physicalId, { fontSize: '11px', color: '#aaa', fontFamily: 'monospace' }).setOrigin(0.5).setDepth(1);
 
     // 24 visible ports (representing 24/48)
     for (let i = 0; i < 24; i++) {
@@ -374,7 +435,7 @@ export class CageScene extends Phaser.Scene {
 
       // Port number label (every 5th)
       if ((i + 1) % 5 === 0) {
-        this.add.text(px, y + 50, `${i + 1}`, { fontSize: '7px', color: '#666', fontFamily: 'monospace' }).setOrigin(0.5);
+        this.add.text(px, y + 50, `${i + 1}`, { fontSize: '7px', color: '#666', fontFamily: 'monospace' }).setOrigin(0.5).setDepth(1);
       }
     }
 
@@ -383,13 +444,14 @@ export class CageScene extends Phaser.Scene {
 
   private renderRouter(role: string, physicalId: string, x: number, y: number): void {
     const g = this.add.graphics();
+    g.setDepth(0);
     g.fillStyle(0xaa4444, 1);
     g.fillRoundedRect(x - 80, y - 35, 160, 70, 6);
     g.lineStyle(2, 0xcc6666, 1);
     g.strokeRoundedRect(x - 80, y - 35, 160, 70, 6);
 
-    this.add.text(x, y - 18, role, { fontSize: '16px', color: '#fff', fontFamily: 'monospace' }).setOrigin(0.5);
-    this.add.text(x, y + 5, physicalId, { fontSize: '11px', color: '#aaa', fontFamily: 'monospace' }).setOrigin(0.5);
+    this.add.text(x, y - 18, role, { fontSize: '16px', color: '#fff', fontFamily: 'monospace' }).setOrigin(0.5).setDepth(1);
+    this.add.text(x, y + 5, physicalId, { fontSize: '11px', color: '#aaa', fontFamily: 'monospace' }).setOrigin(0.5).setDepth(1);
 
     // Get port names based on physical router series
     const portNames = getRouterPortNames(physicalId);
@@ -400,7 +462,7 @@ export class CageScene extends Phaser.Scene {
     wanZone.setData({ deviceId: role, portName: portNames.wan, type: 'ethernet' });
     this.setupPortZone(wanZone, role, portNames.wan, 'ethernet', x - 80, y - 10);
     this.portZones.set(`${role}:${portNames.wan}`, wanZone);
-    this.add.text(x - 80, y - 30, portNames.wan, { fontSize: '9px', color: '#888', fontFamily: 'monospace' }).setOrigin(0.5);
+    this.add.text(x - 80, y - 30, portNames.wan, { fontSize: '9px', color: '#888', fontFamily: 'monospace' }).setOrigin(0.5).setDepth(1);
 
     // LAN port (right)
     const lanZone = this.add.zone(x + 80, y - 10, 20, 20);
@@ -408,7 +470,7 @@ export class CageScene extends Phaser.Scene {
     lanZone.setData({ deviceId: role, portName: portNames.lan, type: 'ethernet' });
     this.setupPortZone(lanZone, role, portNames.lan, 'ethernet', x + 80, y - 10);
     this.portZones.set(`${role}:${portNames.lan}`, lanZone);
-    this.add.text(x + 80, y - 30, portNames.lan, { fontSize: '9px', color: '#888', fontFamily: 'monospace' }).setOrigin(0.5);
+    this.add.text(x + 80, y - 30, portNames.lan, { fontSize: '9px', color: '#888', fontFamily: 'monospace' }).setOrigin(0.5).setDepth(1);
 
     // Console port (bottom)
     const consoleZone = this.add.zone(x, y + 35, 20, 20);
@@ -416,13 +478,14 @@ export class CageScene extends Phaser.Scene {
     consoleZone.setData({ deviceId: role, portName: 'Console', type: 'console' });
     this.setupPortZone(consoleZone, role, 'Console', 'console', x, y + 35);
     this.portZones.set(`${role}:Console`, consoleZone);
-    this.add.text(x, y + 55, 'CON', { fontSize: '9px', color: '#888', fontFamily: 'monospace' }).setOrigin(0.5);
+    this.add.text(x, y + 55, 'CON', { fontSize: '9px', color: '#888', fontFamily: 'monospace' }).setOrigin(0.5).setDepth(1);
 
     this.deviceGraphics.set(role, g);
   }
 
   private renderPatchPanel(role: string, physicalId: string, x: number, y: number): void {
     const g = this.add.graphics();
+    g.setDepth(0);
     g.fillStyle(0x666666, 1);
     g.fillRoundedRect(x - 80, y - 60, 160, 120, 4);
     g.lineStyle(1, 0x888888, 1);
@@ -433,7 +496,7 @@ export class CageScene extends Phaser.Scene {
     const letter = terminations.length > 0 ? terminations[0].deskJackId.charAt(0) :
                    (physicalId === this.physicalAssignment.pcRoles['PC-1'] ? 'A' : 'B');
 
-    this.add.text(x, y - 75, `PANEL ${letter}`, { fontSize: '12px', color: '#fff', fontFamily: 'monospace' }).setOrigin(0.5);
+    this.add.text(x, y - 75, `PANEL ${letter}`, { fontSize: '12px', color: '#fff', fontFamily: 'monospace' }).setOrigin(0.5).setDepth(1);
 
     // 24 jacks per panel (A1-A24 or B1-B24, etc.)
     const cols = 6;
@@ -458,7 +521,7 @@ export class CageScene extends Phaser.Scene {
         this.setupPortZone(portZone, role, jackName, 'patch', px, py);
         this.portZones.set(`${role}:${jackName}`, portZone);
 
-        this.add.text(px, py - 14, jackName, { fontSize: '8px', color: '#aaa', fontFamily: 'monospace' }).setOrigin(0.5);
+        this.add.text(px, py - 14, jackName, { fontSize: '8px', color: '#aaa', fontFamily: 'monospace' }).setOrigin(0.5).setDepth(1);
       }
     }
 
@@ -521,8 +584,11 @@ export class CageScene extends Phaser.Scene {
     if (cableType === 'usbEthernet') {
       return portType === 'patch' || portType === 'usb'; // USB-Ethernet: PC USB -> patch panel
     }
-    if (cableType === 'straight' || cableType === 'crossover') {
-      return portType === 'ethernet' || portType === 'patch'; // RJ45 cables connect ethernet or patch
+    if (cableType === 'straight') {
+      return portType === 'ethernet' || portType === 'patch' || portType === 'console'; // RJ45 straight: ethernet, patch, or console (patch→router console)
+    }
+    if (cableType === 'crossover') {
+      return portType === 'ethernet' || portType === 'patch'; // Crossover only for ethernet/patch (router-router)
     }
     return false;
   }
@@ -718,48 +784,9 @@ export class CageScene extends Phaser.Scene {
     });
   }
 
-  private renderCablePreview(): void {
-    if (!this.cableInProgress) return;
-
-    this.previewGraphics.clear();
-
-    const start = this.cableInProgress.startPort;
-    const end = this.cableInProgress.currentPos;
-
-    // Color by cable type
-    const colors: Record<string, number> = {
-      straight: 0x00ff00,
-      crossover: 0xff8800,
-      usbEthernet: 0x00ffff,
-    };
-
-    const color = colors[this.cableInProgress.type] || 0xffffff;
-
-    // Draw curved cable using line segments (Phaser 4 Graphics doesn't have quadraticCurveTo)
-    this.previewGraphics.lineStyle(3, color, 0.6);
-    this.previewGraphics.beginPath();
-    this.previewGraphics.moveTo(start.x, start.y);
-
-    // Simulate curve with multiple line segments
-    const midX = (start.x + end.x) / 2;
-    const midY = (start.y + end.y) / 2 - 50;
-    const segments = 10;
-    for (let i = 1; i <= segments; i++) {
-      const t = i / segments;
-      // Quadratic bezier formula
-      const x = (1 - t) * (1 - t) * start.x + 2 * (1 - t) * t * midX + t * t * end.x;
-      const y = (1 - t) * (1 - t) * start.y + 2 * (1 - t) * t * midY + t * t * end.y;
-      this.previewGraphics.lineTo(x, y);
-    }
-    this.previewGraphics.strokePath();
-
-    // End point indicator
-    this.previewGraphics.fillStyle(color, 0.6);
-    this.previewGraphics.fillCircle(end.x, end.y, 8);
-  }
-
   private renderCables(): void {
     this.cableGraphics.clear();
+    this.cableHitAreas = [];
 
     if (!this.cables || this.cables.length === 0) return;
 
@@ -774,18 +801,24 @@ export class CageScene extends Phaser.Scene {
       // Color by cable type
       const colorNum = Phaser.Display.Color.HexStringToColor(this.getCableColor(cable.type)).color;
 
-      // Draw curved cable using line segments (Phaser 4 Graphics doesn't have quadraticCurveTo)
-      this.cableGraphics.lineStyle(3, colorNum, cable.seated ? 1 : 0.4);
-      this.cableGraphics.beginPath();
-      this.cableGraphics.moveTo(posA.x, posA.y);
-
-      // Simulate curve with multiple line segments
+      // Calculate curve points for hit detection
       const midX = (posA.x + posB.x) / 2;
       const midY = (posA.y + posB.y) / 2 - 50;
       const segments = 10;
+      const points: { x: number; y: number }[] = [{ x: posA.x, y: posA.y }];
       for (let i = 1; i <= segments; i++) {
         const t = i / segments;
-        // Quadratic bezier formula
+        const x = (1 - t) * (1 - t) * posA.x + 2 * (1 - t) * t * midX + t * t * posB.x;
+        const y = (1 - t) * (1 - t) * posA.y + 2 * (1 - t) * t * midY + t * t * posB.y;
+        points.push({ x, y });
+      }
+
+      // Draw curved cable using line segments (Phaser 4 Graphics doesn't have quadraticCurveTo)
+      this.cableGraphics.lineStyle(5, colorNum, cable.seated ? 1 : 0.4);
+      this.cableGraphics.beginPath();
+      this.cableGraphics.moveTo(posA.x, posA.y);
+      for (let i = 1; i <= segments; i++) {
+        const t = i / segments;
         const x = (1 - t) * (1 - t) * posA.x + 2 * (1 - t) * t * midX + t * t * posB.x;
         const y = (1 - t) * (1 - t) * posA.y + 2 * (1 - t) * t * midY + t * t * posB.y;
         this.cableGraphics.lineTo(x, y);
@@ -795,17 +828,14 @@ export class CageScene extends Phaser.Scene {
       // LED indicator at midpoint
       if (cable.seated) {
         this.cableGraphics.fillStyle(0x00ff00, 1);
-        this.cableGraphics.fillCircle(midX, midY, 6);
+        this.cableGraphics.fillCircle(midX, midY, 8);
       } else {
         this.cableGraphics.fillStyle(0xff0000, 1);
-        this.cableGraphics.fillCircle(midX, midY, 6);
+        this.cableGraphics.fillCircle(midX, midY, 8);
       }
 
-      // Cable type label near midpoint
-      const label = cable.type === 'straight' ? '●' : cable.type === 'crossover' ? '✕' : '⎋';
-      this.cableGraphics.fillStyle(0xffffff, 0.8);
-      this.cableGraphics.fillCircle(midX, midY - 18, 10);
-      // Note: Phaser graphics can't render text easily, skip for now
+      // Store hit area for cable removal (right-click on cable)
+      this.cableHitAreas.push({ cable, graphics: this.cableGraphics, points });
     });
   }
 
@@ -816,6 +846,77 @@ export class CageScene extends Phaser.Scene {
       return { x: portInfo.x, y: portInfo.y };
     }
     return null;
+  }
+
+  // Check if clicking on a cable (for removal via right-click)
+  private getCableAtPosition(x: number, y: number): Cable | null {
+    for (const hitArea of this.cableHitAreas) {
+      // Check distance to any segment of the cable
+      for (let i = 0; i < hitArea.points.length - 1; i++) {
+        const p1 = hitArea.points[i];
+        const p2 = hitArea.points[i + 1];
+        const dist = this.distanceToSegment(x, y, p1.x, p1.y, p2.x, p2.y);
+        if (dist < 12) { // 12px tolerance for thick cable
+          return hitArea.cable;
+        }
+      }
+    }
+    return null;
+  }
+
+  private distanceToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
+    const A = px - x1;
+    const B = py - y1;
+    const C = x2 - x1;
+    const D = y2 - y1;
+
+    const dot = A * C + B * D;
+    const lenSq = C * C + D * D;
+    let param = -1;
+    if (lenSq !== 0) param = dot / lenSq;
+
+    let xx, yy;
+    if (param < 0) {
+      xx = x1;
+      yy = y1;
+    } else if (param > 1) {
+      xx = x2;
+      yy = y2;
+    } else {
+      xx = x1 + param * C;
+      yy = y1 + param * D;
+    }
+
+    const dx = px - xx;
+    const dy = py - yy;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  private removeCable(cableId: string): void {
+    // Remove from local cables array
+    const cableIndex = this.cables.findIndex(c => c.id === cableId);
+    if (cableIndex === -1) return;
+
+    const cable = this.cables[cableIndex];
+
+    // Free up ports
+    if (cable.endA) {
+      const keyA = `${cable.endA.deviceId.logicalRole}:${cable.endA.portName}`;
+      this.occupiedPorts.delete(keyA);
+    }
+    if (cable.endB) {
+      const keyB = `${cable.endB.deviceId.logicalRole}:${cable.endB.portName}`;
+      this.occupiedPorts.delete(keyB);
+    }
+
+    // Remove from array
+    this.cables.splice(cableIndex, 1);
+
+    // Notify store
+    this.onCableRemove(cableId);
+
+    // Re-render
+    this.renderCables();
   }
 
   private renderCableTypeIndicator(): void {

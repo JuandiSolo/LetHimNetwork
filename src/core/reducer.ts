@@ -11,6 +11,7 @@ import type {
   PCState,
   PortId,
 } from './types';
+import { ActionType } from './types';
 import { deriveAddresses } from './addressing';
 import { createPhysicalAssignment } from './scenario';
 
@@ -26,21 +27,8 @@ export const initialState: GameState = {
   pcs: [],
   clock: 0,
   actions: [],
+  activeTerminalPC: null,
 };
-
-// Action types
-export const ActionType = {
-  START_GAME: 'START_GAME',
-  SET_PHASE: 'SET_PHASE',
-  ADD_CABLE: 'ADD_CABLE',
-  REMOVE_CABLE: 'REMOVE_CABLE',
-  SET_CABLE_SEATED: 'SET_CABLE_SEATED',
-  CONNECT_CONSOLE: 'CONNECT_CONSOLE',
-  DISCONNECT_CONSOLE: 'DISCONNECT_CONSOLE',
-  SET_PC_CONFIG: 'SET_PC_CONFIG',
-  ADVANCE_CLOCK: 'ADVANCE_CLOCK',
-  RESET_GAME: 'RESET_GAME',
-} as const;
 
 // Reducer
 export function gameReducer(state: GameState, action: GameAction): GameState {
@@ -193,6 +181,15 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       };
     }
 
+    case ActionType.SET_ACTIVE_TERMINAL_PC: {
+      const { pcId } = action.payload as { pcId: 'PC-1' | 'PC-2' | null };
+      return {
+        ...state,
+        activeTerminalPC: pcId,
+        actions: [...state.actions, { ...action, actionId: state.actions.length, gameTick: state.clock }],
+      };
+    }
+
     default:
       return state;
   }
@@ -281,6 +278,13 @@ export const actions = {
   resetGame: (seed: number): GameAction => ({
     type: ActionType.RESET_GAME,
     payload: { seed },
+    actionId: 0,
+    gameTick: 0,
+  }),
+
+  setActiveTerminalPC: (pcId: 'PC-1' | 'PC-2' | null): GameAction => ({
+    type: ActionType.SET_ACTIVE_TERMINAL_PC,
+    payload: { pcId },
     actionId: 0,
     gameTick: 0,
   }),

@@ -1,148 +1,153 @@
 /**
- * Desktop/PC view - React component for PC configuration and terminal.
- * Mock for H0 - shows IP config and placeholder terminal.
+ * Desktop/PC view - React component for physical PC representation.
+ * H1/H4 Mock: Shows PCs with ports (NIC, USB) and patch panel jacks.
+ * Buttons: "Cableado" → PC_CABLES phase, Click PC → PC_TERMINAL phase
  */
 
-import { useState } from 'react';
 import { usePCs, useGameStore, dispatch } from '@app/store';
 
 export function DesktopView(): React.ReactElement | null {
   const pcs = usePCs();
   const phase = useGameStore(s => s.phase);
-  const [activePC, setActivePC] = useState<'PC-1' | 'PC-2'>('PC-1');
-  const [showTerminal, setShowTerminal] = useState(false);
-  const [terminalOutput, setTerminalOutput] = useState<string[]>([
-    'Bienvenido a la consola del router.',
-    'Conecte el cable de consola y presione Enter.',
-  ]);
-  const [commandInput, setCommandInput] = useState('');
+
+  if (phase !== 'DESKTOP') return null;
 
   const pc1 = pcs.find(p => p.id === 'PC-1');
   const pc2 = pcs.find(p => p.id === 'PC-2');
-  const activePCState = activePC === 'PC-1' ? pc1 : pc2;
 
-  const handleCommand = (cmd: string) => {
-    setTerminalOutput(prev => [...prev, `> ${cmd}`]);
+  // Patch panel jacks per PC (mock: A1-A8 for PC-1, B1-B8 for PC-2)
+  const pc1Jacks = Array.from({ length: 8 }, (_, i) => `A${i + 1}`);
+  const pc2Jacks = Array.from({ length: 8 }, (_, i) => `B${i + 1}`);
 
-    // Mock responses
-    const responses: Record<string, string[]> = {
-      'ping': ['Pinging...', 'Reply from 192.168.30.1: bytes=32 time<1ms TTL=255'],
-      'ipconfig': [
-        `IPv4 Address. . . . . . . . . . . : ${activePCState?.ip}`,
-        `Subnet Mask . . . . . . . . . . . : ${activePCState?.mask}`,
-        `Default Gateway . . . . . . . . . : ${activePCState?.gateway}`,
-      ],
-      'help': ['Comandos disponibles: ping, ipconfig, help, clear'],
-      'clear': ['CLEAR_SCREEN'],
-    };
-
-    const lowerCmd = cmd.toLowerCase().trim();
-    const response = responses[lowerCmd] || [`Comando no reconocido: ${cmd}`];
-
-    if (response.includes('CLEAR_SCREEN')) {
-      setTerminalOutput([]);
-    } else {
-      setTerminalOutput(prev => [...prev, ...response]);
-    }
-    setCommandInput('');
+  const goToCables = () => {
+    dispatch.setPhase('PC_CABLES');
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleCommand(commandInput);
-    }
+  const openTerminal = (pcId: 'PC-1' | 'PC-2') => {
+    dispatch.setActiveTerminalPC(pcId);
+    dispatch.setPhase('PC_TERMINAL');
   };
-
-  if (phase !== 'DESKTOP') return null;
 
   return (
     <div className="desktop-view">
       <div className="desktop-header">
-        <h2>Escritorio - {activePC}</h2>
-        <div className="pc-tabs">
-          <button
-            className={activePC === 'PC-1' ? 'active' : ''}
-            onClick={() => setActivePC('PC-1')}
-          >
-            PC-1
+        <h2>Escritorio - PCs Físicos</h2>
+        <div className="header-actions">
+          <button className="btn-primary" onClick={goToCables}>
+            Cableado PCs ↔ Parrillas
           </button>
           <button
-            className={activePC === 'PC-2' ? 'active' : ''}
-            onClick={() => setActivePC('PC-2')}
+            className="btn-secondary"
+            onClick={() => dispatch.setPhase('LAB')}
           >
-            PC-2
+            ← Volver a la jaula
           </button>
         </div>
-        <button
-          className="btn-secondary"
-          onClick={() => dispatch.setPhase('LAB')}
-        >
-          ← Volver a la jaula
-        </button>
       </div>
 
       <div className="desktop-content">
-        <div className="panel ip-config">
-          <h3>Configuración IP</h3>
-          <div className="config-grid">
-            <label>
-              Dirección IP:
-              <input
-                type="text"
-                value={activePCState?.ip || ''}
-                onChange={e => dispatch.setPCConfig(activePC, e.target.value, activePCState?.mask || '', activePCState?.gateway || '')}
-              />
-            </label>
-            <label>
-              Máscara:
-              <input
-                type="text"
-                value={activePCState?.mask || ''}
-                onChange={e => dispatch.setPCConfig(activePC, activePCState?.ip || '', e.target.value, activePCState?.gateway || '')}
-              />
-            </label>
-            <label>
-              Puerta de enlace:
-              <input
-                type="text"
-                value={activePCState?.gateway || ''}
-                onChange={e => dispatch.setPCConfig(activePC, activePCState?.ip || '', activePCState?.mask || '', e.target.value)}
-              />
-            </label>
-          </div>
-          <p className="com-info">Puerto COM: COM{activePCState?.comPort}</p>
-        </div>
-
-        <div className="panel terminal-panel">
-          <div className="terminal-header">
-            <span>Terminal - PuTTY (Mock)</span>
-            <button
-              className={showTerminal ? 'active' : ''}
-              onClick={() => setShowTerminal(!showTerminal)}
-            >
-              {showTerminal ? 'Cerrar' : 'Abrir Terminal'}
-            </button>
-          </div>
-
-          {showTerminal && (
-            <div className="terminal">
-              <div className="terminal-output">
-                {terminalOutput.map((line, i) => (
-                  <div key={i} className="terminal-line">{line}</div>
-                ))}
-              </div>
-              <div className="terminal-input-line">
-                <span className="prompt">{"PC>"}</span>
-                <input
-                  type="text"
-                  value={commandInput}
-                  onChange={e => setCommandInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  autoFocus
-                />
+        {/* PC Physical Representation Area */}
+        <div className="pc-physical-area">
+          <div className="pc-physical-card" onClick={() => openTerminal('PC-1')}>
+            <div className="pc-box">
+              <div className="pc-label">PC-1</div>
+              <div className="pc-ports">
+                <div className="port-row">
+                  <span className="port-label">NIC</span>
+                  <div className="port rj45" title="RJ45 - Ethernet a Switch"></div>
+                </div>
+                <div className="port-row">
+                  <span className="port-label">USB</span>
+                  <div className="port usb" title="USB - Consola a Parrilla"></div>
+                </div>
               </div>
             </div>
-          )}
+            <div className="patch-panel-mini">
+              <h4>Parrilla A (PC-1)</h4>
+              <div className="patch-jacks">
+                {pc1Jacks.map(jack => (
+                  <div key={jack} className="patch-jack" title={`Parrilla ${jack}`}>{jack}</div>
+                ))}
+              </div>
+            </div>
+            <div className="pc-actions">
+              <button className="btn-primary btn-sm" onClick={(e) => { e.stopPropagation(); openTerminal('PC-1'); }}>
+                Terminal
+              </button>
+            </div>
+          </div>
+
+          <div className="pc-physical-card" onClick={() => openTerminal('PC-2')}>
+            <div className="pc-box">
+              <div className="pc-label">PC-2</div>
+              <div className="pc-ports">
+                <div className="port-row">
+                  <span className="port-label">NIC</span>
+                  <div className="port rj45" title="RJ45 - Ethernet a Switch"></div>
+                </div>
+                <div className="port-row">
+                  <span className="port-label">USB</span>
+                  <div className="port usb" title="USB - Consola a Parrilla"></div>
+                </div>
+              </div>
+            </div>
+            <div className="patch-panel-mini">
+              <h4>Parrilla B (PC-2)</h4>
+              <div className="patch-jacks">
+                {pc2Jacks.map(jack => (
+                  <div key={jack} className="patch-jack" title={`Parrilla ${jack}`}>{jack}</div>
+                ))}
+              </div>
+            </div>
+            <div className="pc-actions">
+              <button className="btn-primary btn-sm" onClick={(e) => { e.stopPropagation(); openTerminal('PC-2'); }}>
+                Terminal
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Config Panel - always visible at bottom */}
+        <div className="pc-config-panel">
+          <h3>Configuración IP de Referencia</h3>
+          <div className="config-grid-full">
+            <div className="pc-config-col">
+              <h4>PC-1</h4>
+              <div className="config-grid">
+                <label>
+                  Dirección IP:
+                  <input type="text" value={pc1?.ip || ''} readOnly />
+                </label>
+                <label>
+                  Máscara:
+                  <input type="text" value={pc1?.mask || ''} readOnly />
+                </label>
+                <label>
+                  Puerta de enlace:
+                  <input type="text" value={pc1?.gateway || ''} readOnly />
+                </label>
+              </div>
+              <p className="com-info">Puerto COM: COM{pc1?.comPort}</p>
+            </div>
+            <div className="pc-config-col">
+              <h4>PC-2</h4>
+              <div className="config-grid">
+                <label>
+                  Dirección IP:
+                  <input type="text" value={pc2?.ip || ''} readOnly />
+                </label>
+                <label>
+                  Máscara:
+                  <input type="text" value={pc2?.mask || ''} readOnly />
+                </label>
+                <label>
+                  Puerta de enlace:
+                  <input type="text" value={pc2?.gateway || ''} readOnly />
+                </label>
+              </div>
+              <p className="com-info">Puerto COM: COM{pc2?.comPort}</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

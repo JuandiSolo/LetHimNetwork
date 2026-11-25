@@ -91,12 +91,22 @@ export function PhaserGame({ onPortClick, onCableDrop }: PhaserGameProps) {
     }
   }, [cableType]);
 
-  // Handle phase changes - show/hide Phaser canvas
+  // Handle phase changes - pause/resume Phaser scene to prevent keyboard capture when hidden
   useEffect(() => {
     if (gameRef.current && containerRef.current) {
       const canvas = containerRef.current.querySelector('canvas');
       if (canvas) {
         canvas.style.display = phase === 'LAB' ? 'block' : 'none';
+      }
+      // Pause/resume scene to stop keyboard/input capture when not in LAB
+      if (sceneRef.current && gameRef.current.scene) {
+        if (phase === 'LAB') {
+          gameRef.current.scene.resume('CageScene');
+          // Focus canvas for keyboard shortcuts
+          canvas?.focus();
+        } else {
+          gameRef.current.scene.pause('CageScene');
+        }
       }
     }
   }, [phase]);

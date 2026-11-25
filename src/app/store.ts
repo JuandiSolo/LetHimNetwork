@@ -89,4 +89,6 @@ export const dispatch = {
     gameStore.dispatch(actions.setPCConfig(pcId, ip, mask, gateway)),
   resetGame: (seed: number) =>
     gameStore.dispatch(actions.resetGame(seed)),
+  setActiveTerminalPC: (pcId: 'PC-1' | 'PC-2' | null) =>
+    gameStore.dispatch(actions.setActiveTerminalPC(pcId)),
 };

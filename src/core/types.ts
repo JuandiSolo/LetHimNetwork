@@ -71,7 +71,24 @@ export interface Cable {
   seated: boolean;        // Physical connection quality (2% failure rate)
 }
 
-export type GamePhase = 'HOME' | 'SELECT_TOPOLOGY' | 'QUIZ' | 'TOOLS' | 'LAB' | 'DESKTOP' | 'REVIEW' | 'FEEDBACK';
+export type GamePhase = 'HOME' | 'SELECT_TOPOLOGY' | 'QUIZ' | 'TOOLS' | 'LAB' | 'DESKTOP' | 'PC_CABLES' | 'PC_TERMINAL' | 'REVIEW' | 'FEEDBACK';
+
+// Action types - exported for reducer and store
+export const ActionType = {
+  START_GAME: 'START_GAME',
+  SET_PHASE: 'SET_PHASE',
+  ADD_CABLE: 'ADD_CABLE',
+  REMOVE_CABLE: 'REMOVE_CABLE',
+  SET_CABLE_SEATED: 'SET_CABLE_SEATED',
+  CONNECT_CONSOLE: 'CONNECT_CONSOLE',
+  DISCONNECT_CONSOLE: 'DISCONNECT_CONSOLE',
+  SET_PC_CONFIG: 'SET_PC_CONFIG',
+  ADVANCE_CLOCK: 'ADVANCE_CLOCK',
+  RESET_GAME: 'RESET_GAME',
+  SET_ACTIVE_TERMINAL_PC: 'SET_ACTIVE_TERMINAL_PC',
+} as const;
+
+export type ActionTypeValue = typeof ActionType[keyof typeof ActionType];
 
 export interface GameState {
   schemaVersion: number;
@@ -84,6 +101,7 @@ export interface GameState {
   pcs: PCState[];
   clock: number;
   actions: GameAction[];
+  activeTerminalPC: 'PC-1' | 'PC-2' | null;
 }
 
 export interface PhysicalAssignment {
