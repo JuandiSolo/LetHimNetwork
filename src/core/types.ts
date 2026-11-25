@@ -60,7 +60,7 @@ export interface PortId {
   portName: string;       // G0/0, G0/1, F0/0, F0/1, CONSOLE, etc.
 }
 
-export type CableType = 'straight' | 'crossover' | 'console';
+export type CableType = 'straight' | 'crossover' | 'usbEthernet';
 
 export interface Cable {
   id: string;

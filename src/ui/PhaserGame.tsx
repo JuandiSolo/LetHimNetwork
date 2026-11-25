@@ -3,7 +3,7 @@
  * Manages Phaser lifecycle and sync with React store.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Phaser from 'phaser';
 import { CageScene } from '@game/CageScene';
 import { useGameStore, usePhysicalAssignment, useCables, dispatch } from '@app/store';
@@ -25,6 +25,7 @@ export function PhaserGame({ onPortClick, onCableDrop }: PhaserGameProps) {
   const physicalAssignment = usePhysicalAssignment();
   const cables = useCables();
   const phase = useGameStore(s => s.phase);
+  const [cableType, setCableType] = useState<'straight' | 'crossover' | 'usbEthernet'>('straight');
 
   // Initialize Phaser
   useEffect(() => {
@@ -60,6 +61,9 @@ export function PhaserGame({ onPortClick, onCableDrop }: PhaserGameProps) {
         // Inject callbacks directly on scene instance
         (sceneRef.current as any).onPortClick = onPortClick;
         (sceneRef.current as any)._onCableDrop = onCableDrop;
+        (sceneRef.current as any).onCableAdd = (cable: Cable) => dispatch.addCable(cable);
+        (sceneRef.current as any).onCableRemove = (cableId: string) => dispatch.removeCable(cableId);
+        (sceneRef.current as any).onCableSeated = (cableId: string, seated: boolean) => dispatch.setCableSeated(cableId, seated);
         if (physicalAssignment) {
           sceneRef.current.updateData({ physicalAssignment, cables });
         }
@@ -80,6 +84,13 @@ export function PhaserGame({ onPortClick, onCableDrop }: PhaserGameProps) {
     }
   }, [physicalAssignment, cables]);
 
+  // Sync cable type to scene
+  useEffect(() => {
+    if (sceneRef.current) {
+      sceneRef.current.setCableType(cableType);
+    }
+  }, [cableType]);
+
   // Handle phase changes - show/hide Phaser canvas
   useEffect(() => {
     if (gameRef.current && containerRef.current) {
@@ -90,7 +101,7 @@ export function PhaserGame({ onPortClick, onCableDrop }: PhaserGameProps) {
     }
   }, [phase]);
 
-  // Render navigation button in LAB phase
+  // Render navigation button and cable type selector in LAB phase
   const showDesktopButton = phase === 'LAB';
 
   return (
@@ -98,27 +109,71 @@ export function PhaserGame({ onPortClick, onCableDrop }: PhaserGameProps) {
       ref={containerRef}
       className="phaser-container"
       style={{
-        width: '100%',
-        height: '100%',
+        width: '100vw',
+        height: '100vh',
         display: phase === 'LAB' ? 'block' : 'none',
-        position: 'relative'
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        zIndex: 10,
       }}
     >
       {showDesktopButton && (
-        <button
-          className="btn-primary lab-to-desktop-btn"
-          onClick={() => dispatch.setPhase('DESKTOP')}
-          style={{
-            position: 'absolute',
-            top: '20px',
-            right: '20px',
-            zIndex: 1000,
-            padding: '10px 20px',
-            fontSize: '14px'
-          }}
-        >
-          Ir a escritorio →
-        </button>
+        <>
+          <button
+            className="btn-primary lab-to-desktop-btn"
+            onClick={() => dispatch.setPhase('DESKTOP')}
+            style={{
+              position: 'absolute',
+              top: '20px',
+              right: '20px',
+              zIndex: 1000,
+              padding: '10px 20px',
+              fontSize: '14px'
+            }}
+          >
+            Ir a escritorio →
+          </button>
+
+          {/* Cable type selector */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '20px',
+              left: '20px',
+              zIndex: 1000,
+              display: 'flex',
+              gap: '8px',
+              background: 'rgba(26, 26, 46, 0.95)',
+              padding: '12px',
+              borderRadius: '8px',
+              border: '1px solid #2a2a4a',
+            }}
+          >
+            <span style={{ color: '#888', fontFamily: 'monospace', fontSize: '12px', alignSelf: 'center' }}>Cable:</span>
+            {(['straight', 'crossover', 'usbEthernet'] as const).map(type => (
+              <button
+                key={type}
+                onClick={() => setCableType(type)}
+                style={{
+                  padding: '8px 16px',
+                  fontSize: '12px',
+                  fontFamily: 'monospace',
+                  fontWeight: 600,
+                  border: '2px solid',
+                  borderColor: cableType === type ? '#00d9a5' : '#3a3a5a',
+                  background: cableType === type ? 'rgba(0, 217, 165, 0.2)' : 'transparent',
+                  color: cableType === type ? '#00d9a5' : '#eaeaea',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  transition: 'all 150ms ease',
+                }}
+              >
+                {type === 'straight' ? 'Recto (1)' : type === 'crossover' ? 'Cruzado (2)' : 'USB-ETH (3)'}
+              </button>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

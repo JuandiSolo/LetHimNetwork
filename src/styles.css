@@ -77,14 +77,7 @@ body {
   overflow-y: auto;
 }
 
-.phaser-container {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 10;
-}
+/* .phaser-container styles now inline in PhaserGame.tsx for proper viewport sizing */
 
 /* ==========================================================================
    Cards & Panels
@@ -551,7 +544,7 @@ h4 {
   background-size: 12px 100%;
 }
 
-.cable-preview.console {
+.cable-preview.usb {
   background: linear-gradient(90deg, #00ffff 0%, #00ffff 50%, transparent 50%, transparent 100%);
   background-size: 12px 100%;
 }

@@ -72,11 +72,21 @@ export const PHYSICAL_PC_POOL = [
 export const PATCH_PANEL_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'] as const;
 export const PATCH_PANEL_NUMBERS = Array.from({ length: 24 }, (_, i) => i + 1);
 
-// Cable inventory for T1 (exact count, no spares per DEC-10)
+// Cable inventory for T1 (exact count, no spares per DEC-10).
+// Fuente: docs/reference/diagrama_conexiones_red.jpeg y diagrama_consola.jpeg
+// - Red: 6 directos (PC-1→parrilla1, parrilla1→SW, PC-2→parrilla2, parrilla2→SW,
+//   SW→R2, SW→R3) + 2 cruzados (R2↔R1, R1↔R3).
+// - Consola: 1 ethernet directo (parrilla→CONSOLE del router) + 1 USB→Ethernet (PC→parrilla).
 export const CABLE_INVENTORY_T1 = {
-  straight: 6,   // PC-1→patch, patch→SW, R2→SW, R3→SW, R2→R1, R1→R3
-  crossover: 0,  // No same-type connections in T1
-  console: 2,    // PC-1→router, PC-2→router
+  straight: 7,     // 6 de red + 1 ethernet directo del tramo de consola
+  crossover: 2,    // R2↔R1, R1↔R3 (routers = mismo tipo)
+  usbEthernet: 1,  // adaptador USB→Ethernet del PC (solo consola)
+} as const;
+
+// Desglose por función (para UI y evaluación)
+export const CABLE_BREAKDOWN_T1 = {
+  network: { straight: 6, crossover: 2 },
+  console: { straight: 1, usbEthernet: 1 },
 } as const;
 
 // Port naming for display (handles F/G difference by physical router)
