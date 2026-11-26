@@ -25,6 +25,7 @@ import { canConnect, remainingCables as coreRemainingCables } from './cables';
 import { executeCliOption, createTerminalSession, invalidateSession } from './cli';
 import { createInitialRouterState } from './cliMenu';
 import { deepClone } from './cli';
+import { detectAnyConsolePath, type ConsolePathInfo } from './cables';
 
 // Initial state
 export const initialState: GameState = {
@@ -133,18 +134,97 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (!validation.ok) {
         return state; // Validation failed - handled in UI with message
       }
+
+      const newCables = [...state.cables, cable];
+
+      // Auto-detect console connection after adding cable
+      let newConsoleLink = state.consoleLink;
+      let newSessions = state.sessions;
+
+      if (state.physicalAssignment) {
+        const consolePath = detectAnyConsolePath(newCables, state.pcs);
+        if (consolePath) {
+          // Check if this is a new connection or same router
+          const isNewConnection = !state.consoleLink || state.consoleLink.connectedRouter !== consolePath.routerRole;
+
+          if (isNewConnection) {
+            // Invalidate previous session if connected to different router
+            if (state.consoleLink?.connectedRouter) {
+              const oldRouterId = state.consoleLink.connectedRouter as RouterId;
+              newSessions = {
+                ...newSessions,
+                [oldRouterId]: invalidateSession(state.sessions[oldRouterId]),
+              };
+            }
+            // Create new session for the connected router
+            const routerId = consolePath.routerRole as RouterId;
+            newSessions = {
+              ...newSessions,
+              [routerId]: createTerminalSession(routerId, state.routers[routerId]),
+            };
+            newConsoleLink = {
+              pcId: consolePath.pcId,
+              comPort: consolePath.comPort,
+              connectedRouter: consolePath.routerRole,
+            };
+          }
+        }
+      }
+
       return {
         ...state,
-        cables: [...state.cables, cable],
+        cables: newCables,
+        consoleLink: newConsoleLink,
+        sessions: newSessions,
         actions: [...state.actions, { ...action, actionId: state.actions.length, gameTick: state.clock }],
       };
     }
 
     case ActionType.REMOVE_CABLE: {
       const { cableId } = action.payload as { cableId: string };
+      const newCables = state.cables.filter(c => c.id !== cableId);
+
+      // Auto-detect console connection after removing cable
+      let newConsoleLink = state.consoleLink;
+      let newSessions = state.sessions;
+
+      if (state.physicalAssignment) {
+        const consolePath = detectAnyConsolePath(newCables, state.pcs);
+        if (!consolePath && state.consoleLink) {
+          // Console connection was broken - invalidate session
+          const routerId = state.consoleLink.connectedRouter as RouterId;
+          newSessions = {
+            ...newSessions,
+            [routerId]: invalidateSession(state.sessions[routerId]),
+          };
+          newConsoleLink = state.consoleLink ? { ...state.consoleLink, connectedRouter: null } : null;
+        } else if (consolePath && state.consoleLink?.connectedRouter !== consolePath.routerRole) {
+          // Console moved to different router
+          if (state.consoleLink?.connectedRouter) {
+            const oldRouterId = state.consoleLink.connectedRouter as RouterId;
+            newSessions = {
+              ...newSessions,
+              [oldRouterId]: invalidateSession(state.sessions[oldRouterId]),
+            };
+          }
+          const routerId = consolePath.routerRole as RouterId;
+          newSessions = {
+            ...newSessions,
+            [routerId]: createTerminalSession(routerId, state.routers[routerId]),
+          };
+          newConsoleLink = {
+            pcId: consolePath.pcId,
+            comPort: consolePath.comPort,
+            connectedRouter: consolePath.routerRole,
+          };
+        }
+      }
+
       return {
         ...state,
-        cables: state.cables.filter(c => c.id !== cableId),
+        cables: newCables,
+        consoleLink: newConsoleLink,
+        sessions: newSessions,
         actions: [...state.actions, { ...action, actionId: state.actions.length, gameTick: state.clock }],
       };
     }

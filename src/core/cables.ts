@@ -152,3 +152,87 @@ export function canConnect(
 }
 
 // NOTA: panelLetterOf se exporta SOLO desde core/scenario.ts para evitar duplicación
+
+import type { PCState } from './types';
+
+// ==================== CONSOLE PATH DETECTION ====================
+
+/** Information about a complete console cable path */
+export interface ConsolePathInfo {
+  pcId: 'PC-1' | 'PC-2';
+  comPort: number;
+  routerRole: 'R1' | 'R2' | 'R3';
+  patchPanelDesk: string; // e.g., 'PP-1:DESK:A6'
+  patchPanelRack: string; // e.g., 'PP-1:RACK:A6'
+  usbEthernetCableId: string;
+  straightCableId: string;
+}
+
+/**
+ * Finds a complete console path: PC.USB --(usbEthernet)--> PatchPanel:DESK --(internal)--> PatchPanel:RACK --(straight)--> Router.Console
+ * Returns the path info if a complete console connection exists for the given router.
+ */
+export function findConsolePath(cables: Cable[], pcs: PCState[], routerRole: 'R1' | 'R2' | 'R3'): ConsolePathInfo | null {
+  // Step 1: Find straight cable connecting PatchPanel:RACK to Router.Console
+  const consoleCable = cables.find(c =>
+    c.type === 'straight' &&
+    c.seated &&
+    c.endA && c.endB &&
+    (
+      (c.endA.deviceId.logicalRole.startsWith('PP-') && c.endA.face === 'RACK' && c.endA.portName.startsWith('A') && c.endB.deviceId.logicalRole === routerRole && c.endB.portName === 'Console') ||
+      (c.endB.deviceId.logicalRole.startsWith('PP-') && c.endB.face === 'RACK' && c.endB.portName.startsWith('A') && c.endA.deviceId.logicalRole === routerRole && c.endA.portName === 'Console')
+    )
+  );
+
+  if (!consoleCable) return null;
+
+  // Determine which end is the patch panel (RACK face)
+  const patchPanelRackEnd = consoleCable.endA!.deviceId.logicalRole.startsWith('PP-') ? consoleCable.endA! : consoleCable.endB!;
+  const patchPanelId = patchPanelRackEnd.deviceId.logicalRole; // e.g., 'PP-1'
+  const patchPortName = patchPanelRackEnd.portName; // e.g., 'A6'
+
+  // Step 2: Find usbEthernet cable connecting PC.USB to same PatchPanel:DESK on same port
+  const usbEthernetCable = cables.find(c =>
+    c.type === 'usbEthernet' &&
+    c.seated &&
+    c.endA && c.endB &&
+    (
+      (c.endA.deviceId.logicalRole.startsWith('PC-') && c.endA.portName === 'USB' &&
+       c.endB.deviceId.logicalRole === patchPanelId && c.endB.face === 'DESK' && c.endB.portName === patchPortName) ||
+      (c.endB.deviceId.logicalRole.startsWith('PC-') && c.endB.portName === 'USB' &&
+       c.endA.deviceId.logicalRole === patchPanelId && c.endA.face === 'DESK' && c.endA.portName === patchPortName)
+    )
+  );
+
+  if (!usbEthernetCable) return null;
+
+  // Determine which PC
+  const pcEnd = usbEthernetCable.endA!.deviceId.logicalRole.startsWith('PC-') ? usbEthernetCable.endA! : usbEthernetCable.endB!;
+  const pcId = pcEnd.deviceId.logicalRole as 'PC-1' | 'PC-2';
+
+  // Find COM port for this PC
+  const pcInfo = pcs.find(p => p.id === pcId);
+  if (!pcInfo) return null;
+
+  return {
+    pcId,
+    comPort: pcInfo.comPort,
+    routerRole,
+    patchPanelDesk: `${patchPanelId}:DESK:${patchPortName}`,
+    patchPanelRack: `${patchPanelId}:RACK:${patchPortName}`,
+    usbEthernetCableId: usbEthernetCable.id,
+    straightCableId: consoleCable.id,
+  };
+}
+
+/**
+ * Checks if any router has a complete console path and returns the first one found.
+ * Used to auto-detect console connection after cable changes.
+ */
+export function detectAnyConsolePath(cables: Cable[], pcs: PCState[]): ConsolePathInfo | null {
+  for (const routerRole of ['R1', 'R2', 'R3'] as const) {
+    const path = findConsolePath(cables, pcs, routerRole);
+    if (path) return path;
+  }
+  return null;
+}
