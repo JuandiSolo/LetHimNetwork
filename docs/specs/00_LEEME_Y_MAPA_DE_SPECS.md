@@ -65,6 +65,7 @@ Lote 1: entorno y experiencia base (varias respuestas D-01…D-07 ya recibidas; 
 - `06_QUIZ_PING_ENTREGA_Y_RUBRICA.md`: miniquiz, ping, monitor, entrega, reintento y propuesta de puntuación delegada.
 - `07_MODELOS_CLI_Y_PREPARACION_CLAUDE_CODE.md`: modelos 2900/2800, interfaces F/G, fixtures CLI y evidencias previas a Claude Code.
 - `08_ESTADO_Y_PROXIMOS_HITOS.md`: resumen vigente de decisiones, bloqueos por hito y próximo lote de preguntas.
+- `09_CLI_SIMULADO_H2.md`: CLI simulado por botones, menús por modo/rol, persistencia running/startup, consola física, evaluación (referencia H7).
 
 
 **Última decisión:** juego con routers 1–8 G0/0/G0/1, 9–12 F0/0/F0/1; paneles A–J con 1–24, ampliables; rúbrica 20/20/20/40 aprobada. El paquete preparado para el repositorio incluye `CLAUDE.md`, `docs/ESTADO.md`, `docs/DECISIONES.md` y `docs/H0_TAREA_INICIAL.md`.

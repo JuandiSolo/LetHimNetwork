@@ -6,9 +6,10 @@
 import { useEffect, useState } from 'react';
 import { useGameStore, useCables, dispatch } from '@app/store';
 import { remainingCables } from '@core/cables';
-import type { CableType, PcId } from '@core/types';
+import type { CableType, PcId, RouterId } from '@core/types';
 import { PhaserGame } from './PhaserGame';
 import { PcTerminalView } from './PcTerminalView';
+import { RouterTerminal } from './RouterTerminal';
 
 const CABLES: { type: CableType; label: string; key: string }[] = [
   { type: 'straight', label: 'Directo', key: '1' },
@@ -22,6 +23,8 @@ export function LabShell() {
   const activePc = useGameStore(s => s.activePc);
   const selected = useGameStore(s => s.selectedCable);
   const cables = useCables();
+  const consoleLink = useGameStore(s => s.consoleLink);
+  const sessions = useGameStore(s => s.sessions);
   const [lines, setLines] = useState<Record<PcId, string[]>>({ 'PC-1': [], 'PC-2': [] });
 
   // Keyboard shortcuts 1/2/3 for cable selection (only in CAGE/PC views)
@@ -38,6 +41,10 @@ export function LabShell() {
 
   if (phase !== 'LAB') return null;
   const left = remainingCables(cables);
+
+  // Find connected router for terminal
+  const connectedRouter = consoleLink?.connectedRouter as RouterId | undefined;
+  const hasActiveSession = connectedRouter && sessions[connectedRouter];
 
   return (
     <div className='lab-shell'>
@@ -75,8 +82,16 @@ export function LabShell() {
         </div>
       )}
       <div className='lab-canvas'><PhaserGame /></div>
+
+      {/* Terminal view - shows either PC terminal or Router terminal */}
       {view === 'TERMINAL' && (
-        <PcTerminalView lines={lines} setLines={setLines} />
+        <>
+          {hasActiveSession && connectedRouter ? (
+            <RouterTerminal routerId={connectedRouter} onClose={() => dispatch.openPc(activePc)} />
+          ) : (
+            <PcTerminalView lines={lines} setLines={setLines} />
+          )}
+        </>
       )}
     </div>
   );

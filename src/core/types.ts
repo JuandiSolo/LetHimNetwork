@@ -91,6 +91,68 @@ export interface JackStatus {
 
 export type GamePhase = 'HOME' | 'SELECT_TOPOLOGY' | 'QUIZ' | 'TOOLS' | 'LAB' | 'REVIEW' | 'FEEDBACK';
 
+// ==================== CLI TYPES (H2) ====================
+
+export type RouterId = 'R1' | 'R2' | 'R3';
+
+export interface RouterInterfaceConfig {
+  ip: string | null;
+  mask: string | null;
+  shutdown: boolean;
+}
+
+export interface RouterRipConfig {
+  enabled: boolean;
+  version: 1 | null;
+  networks: string[]; // Major networks (e.g., "192.168.10.0")
+}
+
+export interface RouterConfig {
+  hostname: string;
+  interfaces: Record<string, RouterInterfaceConfig>;
+  rip: RouterRipConfig;
+}
+
+export interface RouterState {
+  running: RouterConfig;
+  startup: RouterConfig | null;
+  eraseReloadDone: boolean;
+  erasedSinceBoot: boolean;
+}
+
+export type ExecMode = 'user' | 'privileged' | 'config' | 'config-if' | 'config-router';
+
+export interface TerminalSession {
+  routerId: RouterId;
+  mode: ExecMode;
+  output: string[];
+  pendingConfirm?: 'erase' | 'reload';
+  interfaceContext?: string; // e.g., "GigabitEthernet0/0" when in config-if
+  awaitingEnter: boolean;    // After "Conexión interrumpida" or "Sesión cerrada"
+}
+
+// CLI Menu option
+export interface CliMenuOption {
+  id: string;
+  label: string;
+  action: 'transition' | 'value-select' | 'execute' | 'confirm' | 'show' | 'help' | 'exit-session';
+  targetMode?: ExecMode;
+  valueType?: 'ip-address' | 'mask' | 'network' | 'ping-dest' | 'show-type';
+  generatesCommand?: string; // IOS command template with placeholders
+  requiresConfirm?: boolean;
+  subMenu?: CliMenuOption[]; // For "show..." selector
+  interfaceContext?: string; // For config-if transitions
+}
+
+// Value list item for selectors
+export interface ValueListItem {
+  value: string;
+  label: string;
+  description?: string;
+}
+
+// ==================== END CLI TYPES ====================
+
 // Action types - exported for reducer and store
 export const ActionType = {
   START_GAME: 'START_GAME',
@@ -107,6 +169,8 @@ export const ActionType = {
   OPEN_PC: 'OPEN_PC',
   OPEN_TERMINAL: 'OPEN_TERMINAL',
   SELECT_CABLE: 'SELECT_CABLE',
+  // CLI actions
+  EXEC_CLI_OPTION: 'EXEC_CLI_OPTION',
 } as const;
 
 export type ActionTypeValue = typeof ActionType[keyof typeof ActionType];
@@ -125,6 +189,9 @@ export interface GameState {
   labView: LabView;
   activePc: PcId;
   selectedCable: CableType;
+  // CLI state
+  routers: Record<RouterId, RouterState>;
+  sessions: Record<RouterId, TerminalSession | null>;
 }
 
 export interface PhysicalAssignment {
@@ -182,31 +249,6 @@ export interface RouteEntry {
   metric: number;
   type: 'C' | 'L' | 'R'; // Connected, Local, RIP
 }
-
-export interface RouterState {
-  hostname: string;
-  runningConfig: string;
-  startupConfig: string;
-  interfaces: Map<string, InterfaceState>;
-  rip: RipState;
-  execMode: ExecMode;
-}
-
-export interface InterfaceState {
-  name: string;
-  ip: string | null;
-  mask: string | null;
-  shutdown: boolean;
-  linkUp: boolean;
-}
-
-export interface RipState {
-  enabled: boolean;
-  version: 1;
-  networks: string[]; // Major networks
-}
-
-export type ExecMode = 'user' | 'privileged' | 'config' | 'config-if' | 'config-router';
 
 export interface PingTrace {
   source: string;

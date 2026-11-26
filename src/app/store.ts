@@ -100,4 +100,6 @@ export const dispatch = {
     gameStore.dispatch(actions.openTerminal()),
   selectCable: (cableType: 'straight' | 'crossover' | 'usbEthernet') =>
     gameStore.dispatch(actions.selectCable(cableType)),
+  execCliOption: (routerId: 'R1' | 'R2' | 'R3', optionId: string, providedValue?: string, secondValue?: string) =>
+    gameStore.dispatch(actions.execCliOption(routerId, optionId, providedValue, secondValue)),
 };

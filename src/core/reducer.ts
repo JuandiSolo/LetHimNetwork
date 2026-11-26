@@ -13,15 +13,22 @@ import type {
   CableType,
   PcId,
   LabView,
+  RouterId,
+  RouterState,
+  TerminalSession,
+  ExecMode,
 } from './types';
 import { ActionType } from './types';
 import { deriveAddresses } from './addressing';
 import { createPhysicalAssignment, CABLE_INVENTORY_T1 } from './scenario';
 import { canConnect, remainingCables as coreRemainingCables } from './cables';
+import { executeCliOption, createTerminalSession, invalidateSession } from './cli';
+import { createInitialRouterState } from './cliMenu';
+import { deepClone } from './cli';
 
 // Initial state
 export const initialState: GameState = {
-  schemaVersion: 1,
+  schemaVersion: 2, // Bumped for CLI types
   seed: 0,
   phase: 'HOME',
   addressPlan: null,
@@ -34,6 +41,16 @@ export const initialState: GameState = {
   labView: 'CAGE',
   activePc: 'PC-1',
   selectedCable: 'straight',
+  routers: {
+    R1: { running: {} as any, startup: null, eraseReloadDone: false, erasedSinceBoot: false },
+    R2: { running: {} as any, startup: null, eraseReloadDone: false, erasedSinceBoot: false },
+    R3: { running: {} as any, startup: null, eraseReloadDone: false, erasedSinceBoot: false },
+  },
+  sessions: {
+    R1: null,
+    R2: null,
+    R3: null,
+  },
 };
 
 // Reducer
@@ -71,8 +88,16 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         },
       ];
 
+      // Initialize router states
+      const routers: Record<RouterId, RouterState> = {
+        R1: createInitialRouterState('R1', physicalAssignment, seed),
+        R2: createInitialRouterState('R2', physicalAssignment, seed),
+        R3: createInitialRouterState('R3', physicalAssignment, seed),
+      };
+
       return {
         ...state,
+        schemaVersion: 2,
         seed,
         phase: 'SELECT_TOPOLOGY',
         addressPlan: addressResult.value,
@@ -84,6 +109,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         labView: 'CAGE',
         activePc: 'PC-1',
         selectedCable: 'straight',
+        routers,
+        sessions: { R1: null, R2: null, R3: null },
         actions: [{ ...action, actionId: 0, gameTick: 0 }],
       };
     }
@@ -137,17 +164,38 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         comPort: number;
         routerRole: 'R1' | 'R2' | 'R3';
       };
+
+      const routerId = routerRole as RouterId;
+
+      // Invalidate previous session if connected to different router
+      const newSessions = { ...state.sessions };
+      if (state.consoleLink && state.consoleLink.connectedRouter !== routerRole) {
+        // Invalidate old router session
+        const oldRouterId = state.consoleLink.connectedRouter as RouterId;
+        newSessions[oldRouterId] = invalidateSession(state.sessions[oldRouterId]);
+      }
+
+      // Create new session for the connected router
+      newSessions[routerId] = createTerminalSession(routerId, state.routers[routerId]);
+
       return {
         ...state,
         consoleLink: { pcId, comPort, connectedRouter: routerRole },
+        sessions: newSessions,
         actions: [...state.actions, { ...action, actionId: state.actions.length, gameTick: state.clock }],
       };
     }
 
     case ActionType.DISCONNECT_CONSOLE: {
+      const newSessions = { ...state.sessions };
+      if (state.consoleLink?.connectedRouter) {
+        const routerId = state.consoleLink.connectedRouter as RouterId;
+        newSessions[routerId] = invalidateSession(state.sessions[routerId]);
+      }
       return {
         ...state,
         consoleLink: state.consoleLink ? { ...state.consoleLink, connectedRouter: null } : null,
+        sessions: newSessions,
         actions: [...state.actions, { ...action, actionId: state.actions.length, gameTick: state.clock }],
       };
     }
@@ -179,9 +227,15 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const { seed } = action.payload as { seed: number };
       const physicalAssignment = createPhysicalAssignment(seed);
 
+      const routers: Record<RouterId, RouterState> = {
+        R1: createInitialRouterState('R1', physicalAssignment, seed),
+        R2: createInitialRouterState('R2', physicalAssignment, seed),
+        R3: createInitialRouterState('R3', physicalAssignment, seed),
+      };
+
       return {
         ...initialState,
-        schemaVersion: 1,
+        schemaVersion: 2,
         seed,
         phase: 'SELECT_TOPOLOGY',
         addressPlan: state.addressPlan,
@@ -190,6 +244,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           ...pc,
           comPort: 3 + Math.floor(seed * (i + 1) * 10) % 8,
         })),
+        routers,
+        sessions: { R1: null, R2: null, R3: null },
       };
     }
 
@@ -223,6 +279,56 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return {
         ...state,
         selectedCable: cableType,
+      };
+    }
+
+    // ==================== CLI ACTIONS ====================
+    case ActionType.EXEC_CLI_OPTION: {
+      const { routerId, optionId, providedValue, secondValue } = action.payload as {
+        routerId: RouterId;
+        optionId: string;
+        providedValue?: string;
+        secondValue?: string;
+      };
+
+      const session = state.sessions[routerId];
+      if (!session) {
+        return state; // No active session
+      }
+
+      const routerState = state.routers[routerId];
+      const physicalAssignment = state.physicalAssignment!;
+      const addressPlan = state.addressPlan!;
+
+      const result = executeCliOption(
+        routerId,
+        routerState,
+        session,
+        optionId,
+        physicalAssignment,
+        addressPlan,
+        providedValue,
+        secondValue
+      );
+
+      const newSessions = { ...state.sessions };
+      newSessions[routerId] = result.newSession;
+
+      const newRouters = { ...state.routers };
+      newRouters[routerId] = result.newRouterState;
+
+      // If session closed, clear console link
+      let newConsoleLink = state.consoleLink;
+      if (result.sessionClosed) {
+        newConsoleLink = state.consoleLink ? { ...state.consoleLink, connectedRouter: null } : null;
+      }
+
+      return {
+        ...state,
+        routers: newRouters,
+        sessions: newSessions,
+        consoleLink: newConsoleLink,
+        actions: [...state.actions, { ...action, actionId: state.actions.length, gameTick: state.clock }],
       };
     }
 
@@ -327,6 +433,14 @@ export const actions = {
   selectCable: (cableType: CableType): GameAction => ({
     type: ActionType.SELECT_CABLE,
     payload: { cableType },
+    actionId: 0,
+    gameTick: 0,
+  }),
+
+  // CLI action creator
+  execCliOption: (routerId: RouterId, optionId: string, providedValue?: string, secondValue?: string): GameAction => ({
+    type: ActionType.EXEC_CLI_OPTION,
+    payload: { routerId, optionId, providedValue, secondValue },
     actionId: 0,
     gameTick: 0,
   }),

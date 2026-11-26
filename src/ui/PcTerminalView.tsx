@@ -1,26 +1,36 @@
 /**
- * PC Terminal View - Full screen terminal + IP config for active PC.
- * Shown when labView === 'TERMINAL' as React overlay.
+ * PC Terminal View - Button-based terminal for PC (H2).
+ * Per spec: ipconfig, ping (with destination selector), clear, help.
+ * No free text input - uses buttons like router terminal.
  */
 
 import { useState, useEffect } from 'react';
 import { usePCs, useGameStore, dispatch } from '@app/store';
-import type { PcId } from '@core/types';
+import type { PcId, ValueListItem } from '@core/types';
 
 interface PcTerminalViewProps {
   lines: Record<PcId, string[]>;
   setLines: React.Dispatch<React.SetStateAction<Record<PcId, string[]>>>;
 }
 
+const PC_COMMANDS = [
+  { id: 'ipconfig', label: 'ipconfig', action: 'execute' },
+  { id: 'ping', label: 'ping', action: 'value-select', valueType: 'ping-dest' },
+  { id: 'clear', label: 'clear', action: 'execute' },
+  { id: 'help', label: 'help', action: 'execute' },
+];
+
 export function PcTerminalView({ lines, setLines }: PcTerminalViewProps) {
   const activePc = useGameStore(s => s.activePc);
   const pcs = usePCs();
+  const addressPlan = useGameStore(s => s.addressPlan);
+
+  const [terminalOutput, setTerminalOutput] = useState<string[]>([]);
+  const [showValueSelector, setShowValueSelector] = useState<{
+    items: ValueListItem[];
+  } | null>(null);
 
   // Sync local lines state with props (kept in LabShell for per-PC history)
-  const [terminalOutput, setTerminalOutput] = useState<string[]>([]);
-  const [commandInput, setCommandInput] = useState('');
-
-  // Load history when activePc changes
   useEffect(() => {
     setTerminalOutput(lines[activePc] || []);
   }, [activePc, lines]);
@@ -34,34 +44,71 @@ export function PcTerminalView({ lines, setLines }: PcTerminalViewProps) {
 
   const pcState = pcs.find(p => p.id === activePc);
 
-  const handleCommand = (cmd: string) => {
-    setTerminalOutput(prev => [...prev, `> ${cmd}`]);
-
-    const responses: Record<string, string[]> = {
-      'ping': ['Pinging...', 'Reply from 192.168.30.1: bytes=32 time<1ms TTL=255'],
-      'ipconfig': [
-        `IPv4 Address. . . . . . . . . . . : ${pcState?.ip}`,
-        `Subnet Mask . . . . . . . . . . . : ${pcState?.mask}`,
-        `Default Gateway . . . . . . . . . : ${pcState?.gateway}`,
-      ],
-      'help': ['Comandos disponibles: ping, ipconfig, help, clear'],
-      'clear': ['CLEAR_SCREEN'],
-    };
-
-    const lowerCmd = cmd.toLowerCase().trim();
-    const response = responses[lowerCmd] || [`Comando no reconocido: ${cmd}`];
-
-    if (response.includes('CLEAR_SCREEN')) {
-      setTerminalOutput([]);
-    } else {
-      setTerminalOutput(prev => [...prev, ...response]);
-    }
-    setCommandInput('');
+  const addOutput = (newLines: string[]) => {
+    setTerminalOutput(prev => [...prev, ...newLines]);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleCommand(commandInput);
+  const handleCommand = (cmdId: string) => {
+    addOutput([`${activePc}> ${cmdId}`]);
+
+    switch (cmdId) {
+      case 'ipconfig': {
+        if (pcState) {
+          addOutput([
+            `Configuración IP de Windows`,
+            ``,
+            `Adaptador Ethernet:`,
+            `   Dirección IPv4. . . . . . . . . . . : ${pcState.ip}`,
+            `   Máscara de subred . . . . . . . . . : ${pcState.mask}`,
+            `   Puerta de enlace predeterminada . . . : ${pcState.gateway}`,
+          ]);
+        }
+        break;
+      }
+      case 'clear': {
+        setTerminalOutput([]);
+        break;
+      }
+      case 'help': {
+        addOutput([
+          'Comandos disponibles:',
+          '  ipconfig     - Muestra configuración IP',
+          '  ping <dest>  - Envía eco ICMP a destino (H3: simulación real)',
+          '  clear        - Limpia la pantalla',
+          '  help         - Muestra esta ayuda',
+          '',
+          'Nota: ping real disponible en H3. Por ahora muestra destinos disponibles.',
+        ]);
+        break;
+      }
+      case 'ping': {
+        // Handled via value selector
+        break;
+      }
+    }
+  };
+
+  const handleValueSelect = (value: string) => {
+    if (!showValueSelector) return;
+    if (value === 'CANCEL') {
+      setShowValueSelector(null);
+      return;
+    }
+    // Execute ping with selected destination
+    addOutput([`${activePc}> ping ${value}`]);
+    addOutput(['Ping no disponible hasta H3 (motor RIPv1/ping).', `Destino seleccionado: ${value}`]);
+    setShowValueSelector(null);
+  };
+
+  const handleButtonClick = (cmdId: string) => {
+    if (cmdId === 'ping' && addressPlan) {
+      // Open value selector for ping destinations
+      import('@core/cliMenu').then(({ getPingDestinations }) => {
+        const items = getPingDestinations(addressPlan);
+        setShowValueSelector({ items: [...items, { value: 'CANCEL', label: 'Cancelar', description: 'Volver' }] });
+      });
+    } else {
+      handleCommand(cmdId);
     }
   };
 
@@ -107,17 +154,41 @@ export function PcTerminalView({ lines, setLines }: PcTerminalViewProps) {
                 <div key={i} className='terminal-line'>{line}</div>
               ))}
             </div>
-            <div className='terminal-input-line'>
-              <span className='prompt'>{`${activePc}>`}</span>
-              <input
-                type='text'
-                value={commandInput}
-                onChange={e => setCommandInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                autoFocus
-                placeholder='Escriba comando (ping, ipconfig, help, clear)...'
-              />
+
+            {/* Command buttons */}
+            <div className='terminal-menu pc-menu' role="menu" aria-label="Comandos PC">
+              {PC_COMMANDS.map(cmd => (
+                <button
+                  key={cmd.id}
+                  className="menu-btn"
+                  onClick={() => handleButtonClick(cmd.id)}
+                  role="menuitem"
+                  tabIndex={0}
+                >
+                  {cmd.label}
+                </button>
+              ))}
             </div>
+
+            {/* Value selector overlay */}
+            {showValueSelector && (
+              <div className="value-selector" role="dialog" aria-modal="true" aria-label="Seleccione destino ping">
+                <div className="selector-header">Destino para ping</div>
+                <div className="selector-list" role="listbox">
+                  {showValueSelector.items.map(item => (
+                    <button
+                      key={item.value}
+                      className="selector-item"
+                      onClick={() => handleValueSelect(item.value)}
+                      role="option"
+                    >
+                      <span className="item-value">{item.label}</span>
+                      {item.description && <span className="item-desc">{item.description}</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
