@@ -167,6 +167,15 @@ export abstract class BaseLabScene extends Phaser.Scene {
       }
     });
 
+    // Global pointerup - ALWAYS completes or cancels drag (fallback if zone pointerup misses)
+    this.input.on('pointerup', (pointer: PhaserPointer) => {
+      if (this.drag) {
+        // Find port under cursor at release time
+        const endPort = this.getPortAtPosition(pointer.x, pointer.y);
+        this.onUp(endPort);
+      }
+    });
+
     // Right-click on cable to remove
     this.input.on('pointerdown', (pointer: PhaserPointer) => {
       if (pointer.rightButtonDown()) {
@@ -298,6 +307,15 @@ export abstract class BaseLabScene extends Phaser.Scene {
       const cy = Math.min(start.y, end.y) - 40;
       const dist = Math.hypot(x - cx, y - cy);
       if (dist < 15) return cable;
+    }
+    return null;
+  }
+
+  // Find port at screen coordinates (for global pointerup fallback)
+  protected getPortAtPosition(x: number, y: number): PortInfo | null {
+    for (const port of this.ports.values()) {
+      const dist = Math.hypot(x - port.x, y - port.y);
+      if (dist < 16) return port; // 16px radius around port center
     }
     return null;
   }
