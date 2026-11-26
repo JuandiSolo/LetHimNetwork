@@ -52,7 +52,12 @@ export function LabShell() {
         <div className='lab-bar'>
           {/* Navigation */}
           {view === 'CAGE' ? (
-            <button onClick={() => dispatch.openPc(activePc)}>Ir a PCs ({activePc}) →</button>
+            <>
+              <button onClick={() => dispatch.openPc(activePc)}>Ir a PCs ({activePc}) →</button>
+              {connectedRouter && (
+                <button onClick={dispatch.openTerminal}>Terminal ({connectedRouter}) →</button>
+              )}
+            </>
           ) : (
             <>
               <button onClick={dispatch.openCage}>← Jaula</button>
@@ -65,6 +70,9 @@ export function LabShell() {
                   {id.replace('-', ' ')}
                 </button>
               ))}
+              {connectedRouter && (
+                <button onClick={dispatch.openTerminal}>Terminal ({connectedRouter}) →</button>
+              )}
             </>
           )}
           <span className='lab-spacer' />
