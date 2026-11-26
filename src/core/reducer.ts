@@ -143,6 +143,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       if (state.physicalAssignment) {
         const consolePath = detectAnyConsolePath(newCables, state.pcs);
+        if (typeof window !== 'undefined') console.log('[reducer ADD_CABLE] consolePath:', consolePath, 'prev consoleLink:', state.consoleLink);
         if (consolePath) {
           // Check if this is a new connection or same router
           const isNewConnection = !state.consoleLink || state.consoleLink.connectedRouter !== consolePath.routerRole;
@@ -167,6 +168,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
               comPort: consolePath.comPort,
               connectedRouter: consolePath.routerRole,
             };
+            if (typeof window !== 'undefined') console.log('[reducer ADD_CABLE] Created new consoleLink:', newConsoleLink);
           }
         }
       }
@@ -190,6 +192,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       if (state.physicalAssignment) {
         const consolePath = detectAnyConsolePath(newCables, state.pcs);
+        if (typeof window !== 'undefined') console.log('[reducer REMOVE_CABLE] consolePath:', consolePath, 'prev consoleLink:', state.consoleLink);
         if (!consolePath && state.consoleLink) {
           // Console connection was broken - invalidate session
           const routerId = state.consoleLink.connectedRouter as RouterId;

@@ -1,11 +1,12 @@
 /**
  * PC Terminal View - Button-based terminal for PC (H2).
  * Per spec: ipconfig, ping (with destination selector), clear, help.
- * No free text input - uses buttons like router terminal.
+ * When console cable connected: shows 3 panels - IP Config, PC Terminal, Router Terminal.
  */
 
 import { useState, useEffect } from 'react';
 import { usePCs, useGameStore, dispatch } from '@app/store';
+import { RouterTerminal } from './RouterTerminal';
 import type { PcId, ValueListItem } from '@core/types';
 
 interface PcTerminalViewProps {
@@ -24,11 +25,17 @@ export function PcTerminalView({ lines, setLines }: PcTerminalViewProps) {
   const activePc = useGameStore(s => s.activePc);
   const pcs = usePCs();
   const addressPlan = useGameStore(s => s.addressPlan);
+  const consoleLink = useGameStore(s => s.consoleLink);
+  const sessions = useGameStore(s => s.sessions);
 
   const [terminalOutput, setTerminalOutput] = useState<string[]>([]);
   const [showValueSelector, setShowValueSelector] = useState<{
     items: ValueListItem[];
   } | null>(null);
+
+  // Check if console is connected to a router
+  const connectedRouter = consoleLink?.connectedRouter;
+  const hasRouterSession = connectedRouter && sessions[connectedRouter];
 
   // Sync local lines state with props (kept in LabShell for per-PC history)
   useEffect(() => {
@@ -118,7 +125,7 @@ export function PcTerminalView({ lines, setLines }: PcTerminalViewProps) {
 
   return (
     <div className='terminal-overlay'>
-      <div className='terminal-container'>
+      <div className={`terminal-container ${hasRouterSession ? 'three-panels' : ''}`}>
         {/* Left panel: IP Config */}
         <div className='terminal-ip-panel'>
           <h3>Configuración IP - {activePc}</h3>
@@ -142,7 +149,7 @@ export function PcTerminalView({ lines, setLines }: PcTerminalViewProps) {
           </div>
         </div>
 
-        {/* Right panel: Terminal */}
+        {/* Middle panel: PC Terminal */}
         <div className='terminal-main'>
           <div className='terminal-header'>
             <h3>{activePc} - Terminal</h3>
@@ -191,6 +198,13 @@ export function PcTerminalView({ lines, setLines }: PcTerminalViewProps) {
             )}
           </div>
         </div>
+
+        {/* Right panel: Router Terminal (when console connected) */}
+        {hasRouterSession && connectedRouter && (
+          <div className='terminal-router-panel'>
+            <RouterTerminal routerId={connectedRouter} onClose={handleExit} />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -179,12 +179,16 @@ export function findConsolePath(cables: Cable[], pcs: PCState[], routerRole: 'R1
     c.seated &&
     c.endA && c.endB &&
     (
-      (c.endA.deviceId.logicalRole.startsWith('PP-') && c.endA.face === 'RACK' && c.endA.portName.startsWith('A') && c.endB.deviceId.logicalRole === routerRole && c.endB.portName === 'Console') ||
-      (c.endB.deviceId.logicalRole.startsWith('PP-') && c.endB.face === 'RACK' && c.endB.portName.startsWith('A') && c.endA.deviceId.logicalRole === routerRole && c.endA.portName === 'Console')
+      (c.endA.deviceId.logicalRole.startsWith('PP-') && c.endA.face === 'RACK' && c.endB.deviceId.logicalRole === routerRole && c.endB.portName === 'Console') ||
+      (c.endB.deviceId.logicalRole.startsWith('PP-') && c.endB.face === 'RACK' && c.endA.deviceId.logicalRole === routerRole && c.endA.portName === 'Console')
     )
   );
 
-  if (!consoleCable) return null;
+  if (!consoleCable) {
+    // DEBUG
+    if (typeof window !== 'undefined') console.log('[findConsolePath] No console cable found for', routerRole, 'cables:', cables.filter(c => c.type === 'straight' && c.endA && c.endB).map(c => ({ type: c.type, seated: c.seated, endA: c.endA, endB: c.endB })));
+    return null;
+  }
 
   // Determine which end is the patch panel (RACK face)
   const patchPanelRackEnd = consoleCable.endA!.deviceId.logicalRole.startsWith('PP-') ? consoleCable.endA! : consoleCable.endB!;
@@ -204,7 +208,11 @@ export function findConsolePath(cables: Cable[], pcs: PCState[], routerRole: 'R1
     )
   );
 
-  if (!usbEthernetCable) return null;
+  if (!usbEthernetCable) {
+    // DEBUG
+    if (typeof window !== 'undefined') console.log('[findConsolePath] No usbEthernet cable found for', patchPanelId, patchPortName, 'cables:', cables.filter(c => c.type === 'usbEthernet' && c.endA && c.endB).map(c => ({ type: c.type, seated: c.seated, endA: c.endA, endB: c.endB })));
+    return null;
+  }
 
   // Determine which PC
   const pcEnd = usbEthernetCable.endA!.deviceId.logicalRole.startsWith('PC-') ? usbEthernetCable.endA! : usbEthernetCable.endB!;

@@ -1578,3 +1578,63 @@ h4 {
   font-size: 0.9rem;
   outline: none;
 }
+
+/* ==========================================================================
+   Three-panel layout for PC Terminal with Router Terminal
+   ========================================================================== */
+
+.terminal-container.three-panels {
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.terminal-container.three-panels .terminal-ip-panel {
+  width: 280px;
+  flex-shrink: 0;
+}
+
+.terminal-container.three-panels .terminal-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.terminal-router-panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal-router-panel .router-terminal-overlay {
+  position: static;
+  background: transparent;
+  padding: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal-router-panel .router-terminal {
+  max-width: none;
+  max-height: none;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal-router-panel .terminal-output {
+  max-height: none;
+}
+
+/* Responsive: stack on narrow screens */
+@media (max-width: 1200px) {
+  .terminal-container.three-panels {
+    flex-direction: column;
+  }
+  .terminal-container.three-panels .terminal-ip-panel {
+    width: 100%;
+  }
+  .terminal-router-panel {
+    min-height: 400px;
+  }
+}
