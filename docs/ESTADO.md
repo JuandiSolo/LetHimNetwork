@@ -96,6 +96,54 @@
 
 **H1: COMPLETADO ✅**
 
+---
+
+## H1 - Pendientes para H4 (Interfaz/flujo) — No bloqueantes
+
+*Registrado 2026-11-26 tras completar H1 click-to-connect*
+
+| Item | Descripción | Hito | Archivos afectados |
+|------|-------------|------|-------------------|
+| **Zoom por puerto** | Vista zoom centrada en puerto al hacer click (hitbox preciso 32×32px actual es grueso). Requiere cámara dedicada o modal. | H4 | `src/game/BaseLabScene.ts`, `src/game/CageScene.ts` |
+| **Accesibilidad Tab+Enter** | Controles DOM por puerto (lista/selector sincronizado) para navegación teclado. Phaser Zone no recibe foco HTML. | H4 | `src/game/BaseLabScene.ts`, `src/ui/` nuevo componente |
+| **Tooltip accesible en `opposite`** | Reemplazar emoji 🔗 + texto por tooltip nativo o custom Phaser con `aria-label` equivalente. | H4 | `src/game/BaseLabScene.ts` (drawPorts) |
+| **Sonido click conexión** | Feedback auditivo al entrar/salir de connectionMode (opcional, nice-to-have). | H4 | `src/game/BaseLabScene.ts` |
+| **Animación pulso `opposite`** | Phaser Tween en graphics vs CSS animation en texto. Decidir implementación. | H4 | `src/game/BaseLabScene.ts` |
+| **Catálogo PCs A–J** | `PHYSICAL_PC_POOL` solo A–H; spec define A–J ampliable. Definir si I/J en Fase 1 y su mapa real. | H4/H8 | `src/core/scenario.ts`, `src/game/PcScene.ts` |
+| **Nomenclatura USB-Ethernet** | Etiqueta "adaptador USB a Ethernet" vs spec (consola serial). Definir nomenclatura visual. | H4 | `src/ui/LabShell.tsx`, `src/ui/ToolsView.tsx` |
+| **Asiento aleatorio 2%** | Código usa `Math.random() > 0.02` pero spec §10 dice "no crear probabilidad por defecto". Decidir regla. | H4/H7 | `src/game/BaseLabScene.ts` (portInfoToPortId) |
+
+---
+
+## H1 - Fase 3: Medición y Optimización (2026-11-26)
+
+**Objetivo:** Verificar que no hay reconstrucciones por frame, no hay leaks de objetos/handlers, render < 5ms.
+
+**Cambios aplicados (BaseLabScene.ts):**
+- `buildStaticLayout()` llamado **una vez** en `create()` (fondo, cajas, textos, zonas)
+- `renderDynamicState()` solo en `update()` si `dirtyDynamic=true` o `connectionMode` activo
+- `update()` retorna temprano si `!dirtyDynamic && !connectionMode`
+- Graphics reutilizables (`cableGraphics`, `dragGraphics`, `portGraphics`) — no se destruyen
+- `portTexts` Map limpiado en cada render dinámico (no leak)
+- Click-to-connect elimina `pointermove` continuo (drag preview 60fps → 0fps salvo modo conexión)
+
+**Métricas Chrome DevTools Performance (grabación 42s, interacciones reales: conectar/desconectar cables, navegar Jaula↔PC):**
+
+| Métrica | Valor | Objetivo | ✅/❌ |
+|---------|-------|----------|-------|
+| Render continuo | No (gaps grandes) | No loop | ✅ |
+| `renderDynamicState` self time | 5.0 ms (0.1% total) | < 5 ms/ejecución | ✅ |
+| `renderDynamicState` pico | < 2 ms | < 5 ms | ✅ |
+| LCP | 0.29 s | < 2.5 s | ✅ |
+| CLS | 0.00 | < 0.1 | ✅ |
+| INP (canvas) | 136–182 ms | < 200 ms | ✅ |
+| Children leak tras 20 ciclos | 0 (estable) | 0 | ✅ |
+| PortTexts leak tras 20 ciclos | 0 (estable) | 0 | ✅ |
+
+**Evidencia:** Captura Performance tab → Call tree `renderDynamicState` muestra solo `drawCables` + `drawPorts` + `drawConnectionPreview` + creación textos dinámicos. Sin `buildStaticLayout`, sin destrucción `children.list`.
+
+**Fase 3: COMPLETADA ✅**
+
 **Estado flujo de navegación H0:**
 - HOME → X/Y form → submit → SELECT_TOPOLOGY
 - SELECT_TOPOLOGY → select T1 → QUIZ

@@ -3,7 +3,7 @@
  * Pure TypeScript - no Phaser, React, or DOM dependencies.
  */
 
-import type { Cable, CableType, PortId, PcId, PhysicalAssignment } from './types';
+import type { Cable, CableType, PortId, PcId, PhysicalAssignment, JackStatus, JackSideStatus, PatchFace } from './types';
 import { CABLE_INVENTORY_T1 } from './scenario';
 
 export type DeviceKind = 'pc' | 'switch' | 'router' | 'patch';
@@ -64,17 +64,91 @@ export function checkConnection(type: CableType, a: PortRef, b: PortRef): Check 
   return no('Directo: solo entre equipos de distinto tipo');
 }
 
-/**
- * Gets the patch panel letter for a given PC from physical assignment.
- * The patch panels PP-1 and PP-2 are the SAME logical device in cage and PC views.
- */
-export function panelLetterOf(pc: PcId, pa: PhysicalAssignment): string {
-  const physical = pa.pcRoles[pc]; // e.g., 'PC 5'
-  // Find in PHYSICAL_PC_POOL (need to import or replicate logic)
-  // For now, extract from physicalLabel which has format "PC N"
-  const match = physical.match(/PC\s+(\d+)/);
-  if (!match) return 'A'; // fallback
-  const pcNum = parseInt(match[1], 10);
-  // Letters assigned cyclically A-H for 8 PCs
-  return String.fromCharCode(65 + ((pcNum - 1) % 8)); // A=65
+// ===== NUEVO: Claves y estado por terminación física =====
+
+/** Clave única por terminación física (incluye cara para PP) */
+export function portKey(port: PortId): string {
+  const face = port.face ? `:${port.face}` : '';
+  return `${port.deviceId.logicalRole}:${port.portName}${face}`;
 }
+
+/** ¿Misma terminación física (misma cara)? */
+export function sameTermination(a: PortId, b: PortId): boolean {
+  return portKey(a) === portKey(b);
+}
+
+/** Vista a la que pertenece un puerto individual */
+export function viewOfPort(port: PortId): 'cage' | 'pc' {
+  const role = port.deviceId.logicalRole;
+  if (role.startsWith('PC-')) return 'pc';
+  if (role.startsWith('PP-')) return port.face === 'DESK' ? 'pc' : 'cage';
+  return 'cage'; // SW, R1, R2, R3
+}
+
+/** Vista de un cable (ambos extremos deben coincidir) */
+export function viewOfCable(cable: { endA: PortId | null; endB: PortId | null }): 'cage' | 'pc' {
+  if (!cable.endA || !cable.endB) throw new Error('Cable incompleto');
+  const vA = viewOfPort(cable.endA);
+  const vB = viewOfPort(cable.endB);
+  if (vA !== vB) throw new Error(`Cable entre vistas inválido: ${vA} vs ${vB}`);
+  return vA;
+}
+
+/** Estado completo de un jack visible (para UI) */
+export function getJackStatus(cables: Cable[], port: PortId, currentView: 'cage' | 'pc'): JackStatus {
+  let here: JackSideStatus | null = null;
+  let opposite: JackSideStatus | null = null;
+
+  for (const c of cables) {
+    if (!c.endA || !c.endB) continue;
+    const matchesA = sameTermination(c.endA, port);
+    const matchesB = sameTermination(c.endB, port);
+    if (!matchesA && !matchesB) continue;
+
+    const other = matchesA ? c.endB : c.endA;
+    const cableView = viewOfCable(c);
+
+    if (cableView === currentView) {
+      here = { cableId: c.id, otherEnd: other, seated: c.seated };
+    } else {
+      opposite = { cableId: c.id, otherEnd: other, seated: c.seated };
+    }
+  }
+
+  return { here, opposite };
+}
+
+/** Validación unificada para añadir cable (usa checkConnection + ocupación por cara + inventario + vista) */
+export function canConnect(
+  cables: Cable[],
+  newCable: { type: CableType; endA: PortId; endB: PortId },
+  currentView: 'cage' | 'pc'
+): Check {
+  // 1. Validación de tipo (checkConnection existente adaptado a PortId)
+  const typeCheck = checkConnection(newCable.type,
+    { deviceId: newCable.endA.deviceId.logicalRole, portName: newCable.endA.portName },
+    { deviceId: newCable.endB.deviceId.logicalRole, portName: newCable.endB.portName }
+  );
+  if (!typeCheck.ok) return typeCheck;
+
+  // 2. Mismo extremo (misma cara)
+  if (sameTermination(newCable.endA, newCable.endB)) return no('Mismo puerto');
+
+  // 3. Ocupación por cara (solo 'here' bloquea en la vista actual)
+  for (const end of [newCable.endA, newCable.endB]) {
+    const status = getJackStatus(cables, end, currentView);
+    if (status.here) return no(`Puerto ocupado por ${status.here.cableId}`);
+  }
+
+  // 4. Inventario
+  const rem = remainingCables(cables);
+  if (rem[newCable.type] <= 0) return no(`No quedan cables de tipo ${newCable.type}`);
+
+  // 5. Vista consistente (ambos extremos misma vista = currentView)
+  const cableView = viewOfCable(newCable);
+  if (cableView !== currentView) return no('Conexión entre vistas no permitida');
+
+  return OK;
+}
+
+// NOTA: panelLetterOf se exporta SOLO desde core/scenario.ts para evitar duplicación

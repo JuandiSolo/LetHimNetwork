@@ -7,8 +7,8 @@ import {
   kindOf,
   remainingCables,
   checkConnection,
-  panelLetterOf,
 } from '@core/cables';
+import { panelLetterOf } from '@core/scenario';
 import type { Cable, CableType, PhysicalAssignment } from '@core/types';
 import { CABLE_INVENTORY_T1 } from '@core/scenario';
 

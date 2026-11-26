@@ -36,9 +36,15 @@ export class CageScene extends BaseLabScene {
       this.camera.zoom = Phaser.Math.Clamp(this.camera.zoom * zoomFactor, 0.5, 2);
     });
 
-    // Pan with right-click drag or middle mouse
+    // Pan with right-click drag or middle mouse - ONLY if not clicking on a cable
     this.input.on('pointerdown', (pointer: PhaserPointer) => {
       if (pointer.rightButtonDown() || pointer.middleButtonDown()) {
+        // Check if clicking on a cable (base class method)
+        const cable = this.findCableAt(pointer.x, pointer.y);
+        if (cable) {
+          // Let base class handle cable deletion, don't start pan
+          return;
+        }
         this.isPanning = true;
         this.lastPointerX = pointer.x;
         this.lastPointerY = pointer.y;
@@ -73,16 +79,16 @@ export class CageScene extends BaseLabScene {
 
     // Context menu prevention for right-click pan
     this.game.canvas.addEventListener('contextmenu', (e: Event) => e.preventDefault());
-
-    // Initial render
-    this.renderCageBackground();
   }
 
-  protected buildLayout() {
+  protected getCurrentView(): 'cage' | 'pc' {
+    return 'cage';
+  }
+
+  protected buildStaticLayout() {
     const pa = this.state.physicalAssignment;
     if (!pa) return;
 
-    // Render cage background
     this.renderCageBackground();
 
     // Render Switch (center)
@@ -100,7 +106,7 @@ export class CageScene extends BaseLabScene {
       this.renderRouter(role, physicalId, x, y);
     });
 
-    // Render Patch Panels (left side)
+    // Render Patch Panels (left side) - RACK face
     this.renderPatchPanel('PP-1', pa.pcRoles['PC-1'], 300, 200);
     this.renderPatchPanel('PP-2', pa.pcRoles['PC-2'], 300, 700);
   }
@@ -196,9 +202,8 @@ export class CageScene extends BaseLabScene {
   }
 
   private renderPatchPanel(role: string, physicalId: string, x: number, y: number) {
-    this.addDeviceBox(x - 80, y - 60, 160, 120, `PANEL ${panelLetterOf(role === 'PP-1' ? 'PC-1' : 'PC-2', this.state.physicalAssignment!)}`, 0x666666);
-
     const letter = panelLetterOf(role === 'PP-1' ? 'PC-1' : 'PC-2', this.state.physicalAssignment!);
+    this.addDeviceBox(x - 80, y - 60, 160, 120, `PANEL ${letter}`, 0x666666);
     this.add.text(x, y - 75, `PANEL ${letter}`, { fontSize: '12px', color: '#fff', fontFamily: 'monospace' }).setOrigin(0.5).setDepth(1);
 
     // 24 jacks per panel (6 cols × 4 rows)

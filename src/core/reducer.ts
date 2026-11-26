@@ -17,6 +17,7 @@ import type {
 import { ActionType } from './types';
 import { deriveAddresses } from './addressing';
 import { createPhysicalAssignment, CABLE_INVENTORY_T1 } from './scenario';
+import { canConnect, remainingCables as coreRemainingCables } from './cables';
 
 // Initial state
 export const initialState: GameState = {
@@ -34,13 +35,6 @@ export const initialState: GameState = {
   activePc: 'PC-1',
   selectedCable: 'straight',
 };
-
-// Helper to calculate remaining cables
-function remainingCables(cables: Cable[]): Record<CableType, number> {
-  const r: Record<CableType, number> = { ...CABLE_INVENTORY_T1 };
-  for (const c of cables) r[c.type] -= 1;
-  return r;
-}
 
 // Reducer
 export function gameReducer(state: GameState, action: GameAction): GameState {
@@ -105,14 +99,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
     case ActionType.ADD_CABLE: {
       const { cable } = action.payload as { cable: Cable };
-      // Check port availability
-      if (isPortOccupied(state.cables, cable.endA) || isPortOccupied(state.cables, cable.endB)) {
-        return state; // Port busy - handled in UI
-      }
-      // Check cable inventory
-      const remaining = remainingCables(state.cables);
-      if (remaining[cable.type] <= 0) {
-        return state; // No cables of this type left
+      // Determine current view from labView
+      const currentView = state.labView === 'CAGE' ? 'cage' : 'pc';
+      // Validate using unified logic (type, face occupation, inventory, view consistency)
+      const validation = canConnect(state.cables, { type: cable.type, endA: cable.endA!, endB: cable.endB! }, currentView);
+      if (!validation.ok) {
+        return state; // Validation failed - handled in UI with message
       }
       return {
         ...state,
@@ -237,21 +229,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     default:
       return state;
   }
-}
-
-// Helper to check if a port is already occupied
-function isPortOccupied(cables: Cable[], port: PortId | null): boolean {
-  if (!port) return false;
-  return cables.some(c =>
-    (c.endA && portsEqual(c.endA, port)) ||
-    (c.endB && portsEqual(c.endB, port))
-  );
-}
-
-function portsEqual(a: PortId, b: PortId): boolean {
-  return a.deviceId.logicalRole === b.deviceId.logicalRole &&
-         a.deviceId.physicalLabel === b.deviceId.physicalLabel &&
-         a.portName === b.portName;
 }
 
 // Action creators

@@ -122,6 +122,8 @@ export function generatePatchTerminations(
       rackJackId: jack,
       internalLinkId: `internal-${jack}`,
       verifiedBy: 'pending',
+      deskFace: 'DESK',
+      rackFace: 'RACK',
     });
   }
   for (let i = 1; i <= 4; i++) {
@@ -132,6 +134,8 @@ export function generatePatchTerminations(
       rackJackId: jack,
       internalLinkId: `internal-${jack}`,
       verifiedBy: 'pending',
+      deskFace: 'DESK',
+      rackFace: 'RACK',
     });
   }
 

@@ -14,11 +14,32 @@ import type { PhysicalAssignment, PcId } from '@core/types';
 type PhaserPointer = any;
 
 export class PcScene extends BaseLabScene {
+  private lastActivePc: PcId | null = null;
+
   constructor() {
     super('PcScene');
   }
 
-  protected buildLayout() {
+  create() {
+    super.create();
+    this.lastActivePc = this.state.activePc;
+  }
+
+  update() {
+    // Rebuild static layout if activePc changed
+    if (this.state.activePc !== this.lastActivePc) {
+      this.lastActivePc = this.state.activePc;
+      this.dirty = true; // Will trigger full rebuild
+      this.staticLayoutBuilt = false;
+    }
+    super.update();
+  }
+
+  protected getCurrentView(): 'cage' | 'pc' {
+    return 'pc';
+  }
+
+  protected buildStaticLayout() {
     const pa = this.state.physicalAssignment;
     if (!pa) return;
 
@@ -101,7 +122,7 @@ export class PcScene extends BaseLabScene {
       fontFamily: 'monospace',
     }).setOrigin(0.5).setDepth(1);
 
-    // 3) Patch panel on right side
+    // 3) Patch panel on right side - DESK face
     const panel = {
       x: W * 0.66,
       y: H * 0.05,

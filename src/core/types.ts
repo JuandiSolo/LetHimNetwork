@@ -55,9 +55,12 @@ export interface DeviceId {
   physicalLabel: string;  // e.g., "Router 7", "PC 4", "SW 2"
 }
 
+export type PatchFace = 'DESK' | 'RACK';
+
 export interface PortId {
   deviceId: DeviceId;
   portName: string;       // G0/0, G0/1, F0/0, F0/1, CONSOLE, etc.
+  face?: PatchFace;       // obligatorio para PP-*, ausente en PC/SW/R
 }
 
 export type CableType = 'straight' | 'crossover' | 'usbEthernet';
@@ -72,6 +75,18 @@ export interface Cable {
   endB: PortId | null;
   color: string;          // Visual identifier
   seated: boolean;        // Physical connection quality (2% failure rate)
+}
+
+// Estado visual de un jack de parrilla (dos caras independientes)
+export interface JackSideStatus {
+  cableId: string;
+  otherEnd: PortId;
+  seated: boolean;
+}
+
+export interface JackStatus {
+  here: JackSideStatus | null;      // Cable en esta vista (bloquea)
+  opposite: JackSideStatus | null;  // Cable en otra vista (ilumina, no bloquea)
 }
 
 export type GamePhase = 'HOME' | 'SELECT_TOPOLOGY' | 'QUIZ' | 'TOOLS' | 'LAB' | 'REVIEW' | 'FEEDBACK';
@@ -126,6 +141,9 @@ export interface PatchTermination {
   rackJackId: string;
   internalLinkId: string;
   verifiedBy: 'photo' | 'user' | 'pending';
+  // Caras físicas para validación de ocupación
+  deskFace: 'DESK';
+  rackFace: 'RACK';
 }
 
 export interface ConsoleLink {
