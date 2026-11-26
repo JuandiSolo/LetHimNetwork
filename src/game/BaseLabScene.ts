@@ -188,8 +188,11 @@ export abstract class BaseLabScene extends Phaser.Scene {
       if (!start || !end) continue;
 
       const color = parseInt(cable.color.replace('#', ''), 16);
-      g.lineStyle(cable.seated ? 3 : 2, color, cable.seated ? 1 : 0.5);
-      if (!cable.seated) g.setLineStyle(2, color, 0.5, 1, [5, 5]);
+      if (cable.seated) {
+        g.lineStyle(3, color, 1);
+      } else {
+        g.lineStyle(2, color, 0.5, 1, [5, 5]); // dashed line for unseated
+      }
 
       this.drawBezier(g, start.x, start.y, end.x, end.y);
 
