@@ -202,7 +202,7 @@ export function PcTerminalView({ lines, setLines }: PcTerminalViewProps) {
         {/* Right panel: Router Terminal (when console connected) */}
         {hasRouterSession && connectedRouter && (
           <div className='terminal-router-panel'>
-            <RouterTerminal routerId={connectedRouter} onClose={handleExit} />
+            <RouterTerminal routerId={connectedRouter} onClose={handleExit} embedded={true} />
           </div>
         )}
       </div>

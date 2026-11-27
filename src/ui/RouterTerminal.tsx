@@ -10,9 +10,10 @@ import type { RouterId, ExecMode, ValueListItem, TerminalSession } from '@core/t
 interface RouterTerminalProps {
   routerId: RouterId;
   onClose: () => void;
+  embedded?: boolean; // When true, render inline without overlay
 }
 
-export const RouterTerminal: React.FC<RouterTerminalProps> = ({ routerId, onClose }) => {
+export const RouterTerminal: React.FC<RouterTerminalProps> = ({ routerId, onClose, embedded = false }) => {
   const state = useGameStore();
   const session = state.sessions[routerId];
   const routerState = state.routers[routerId];
@@ -142,10 +143,6 @@ export const RouterTerminal: React.FC<RouterTerminalProps> = ({ routerId, onClos
     }
   }, [session?.pendingConfirm, session?.awaitingEnter]);
 
-  // Check for awaiting value select - we need to detect this from the reducer result
-  // For now, we'll handle it via a special action or state
-  // The reducer doesn't return awaitingValueSelect to store, so we handle via a different mechanism
-
   const handlePuttyOpen = () => {
     const pc = state.pcs.find((p: { id: string; comPort: number }) => p.id === activePc);
     if (pc && consoleLink?.connectedRouter) {
@@ -167,18 +164,26 @@ export const RouterTerminal: React.FC<RouterTerminalProps> = ({ routerId, onClos
     }
   };
 
+  const handlePuttyClose = () => {
+    setShowPutty(false);
+    setPuttyCom('');
+  };
+
   if (!session || !routerState) {
-    return (
-      <div className="router-terminal-overlay" role="dialog" aria-modal="true" aria-label="Terminal del router">
-        <div className="router-terminal">
-          <div className="terminal-header">
-            <span>Router {routerId}</span>
-            <button onClick={onClose} aria-label="Cerrar terminal">×</button>
-          </div>
-          <div className="terminal-output" ref={outputRef} role="log" aria-live="polite">
-            <p>Sin conexión de consola. Conecte el cable USB→RJ45 del PC al router.</p>
-          </div>
+    const noSessionContent = (
+      <div className="router-terminal">
+        <div className="terminal-header">
+          <span>Router {routerId}</span>
+          {!embedded && <button onClick={onClose} aria-label="Cerrar terminal">×</button>}
         </div>
+        <div className="terminal-output" ref={outputRef} role="log" aria-live="polite">
+          <p>Sin conexión de consola. Conecte el cable USB→RJ45 del PC al router.</p>
+        </div>
+      </div>
+    );
+    return embedded ? noSessionContent : (
+      <div className="router-terminal-overlay" role="dialog" aria-modal="true" aria-label="Terminal del router">
+        {noSessionContent}
       </div>
     );
   }
@@ -186,91 +191,101 @@ export const RouterTerminal: React.FC<RouterTerminalProps> = ({ routerId, onClos
   const isConnected = consoleLink?.connectedRouter === routerId;
   const prompt = `${routerState.running.hostname}${getPromptChar(session.mode)}`;
 
-  return (
-    <div className="router-terminal-overlay" role="dialog" aria-modal="true" aria-label={`Terminal ${routerId} - ${session.mode}`}>
-      <div className="router-terminal">
-        {/* Header */}
-        <div className="terminal-header">
-          <div className="header-left">
-            <span className="router-badge">{routerId}</span>
-            <span className="mode-badge">{session.mode}</span>
-            {session.interfaceContext && <span className="iface-badge">{session.interfaceContext}</span>}
-          </div>
-          <div className="header-right">
-            {!isConnected && (
-              <button className="btn-putty" onClick={handlePuttyOpen} disabled={!consoleLink?.connectedRouter}>
-                🔌 PuTTY
-              </button>
-            )}
-            <button className="btn-close" onClick={onClose} aria-label="Cerrar terminal">×</button>
-          </div>
+  const terminalContent = (
+    <div className="router-terminal">
+      {/* Header */}
+      <div className="terminal-header">
+        <div className="header-left">
+          <span className="router-badge">{routerId}</span>
+          <span className="mode-badge">{session.mode}</span>
+          {session.interfaceContext && <span className="iface-badge">{session.interfaceContext}</span>}
         </div>
-
-        {/* Connection status */}
-        {!isConnected && (
-          <div className="connection-banner">
-            ⚠️ Conexión interrumpida. {session.awaitingEnter ? 'Pulse Enter para continuar.' : 'Conecte el cable de consola.'}
-          </div>
-        )}
-
-        {/* Output area */}
-        <div className="terminal-output" ref={outputRef} role="log" aria-live="polite" aria-label="Salida del terminal">
-          {session.output.map((line: string, i: number) => (
-            <div key={i} className="output-line">{line}</div>
-          ))}
-          {session.awaitingEnter && <div className="output-line awaiting-enter">▌</div>}
-        </div>
-
-        {/* Current prompt line */}
-        <div className="prompt-line">
-          <span className="prompt">{prompt}</span>
-          {showValueSelector && (
-            <ValueSelector
-              items={showValueSelector.items}
-              onSelect={handleValueSelect}
-              onCancel={() => setShowValueSelector(null)}
-              label={showValueSelector.valueType === 'mask' ? `Máscara para ${showValueSelector.firstValue}` : 'Seleccione un valor'}
-            />
-          )}
-          {showConfirm && (
-            <ConfirmDialog
-              action={showConfirm}
-              onConfirm={() => handleOptionClick('confirm')}
-              onCancel={() => handleOptionClick('cancel')}
-            />
-          )}
-          {awaitingEnter && (
-            <span className="press-enter">[Pulse Enter]</span>
-          )}
-        </div>
-
-        {/* Menu buttons */}
-        <div className="terminal-menu" role="menu" aria-label="Comandos disponibles">
-          {menuOptions.map((opt, i) => (
-            <button
-              key={opt.id}
-              ref={i === 0 ? inputRef : undefined}
-              className="menu-btn"
-              onClick={() => handleOptionClick(opt.id)}
-              disabled={!isConnected || awaitingEnter || !!showConfirm || !!showValueSelector}
-              role="menuitem"
-              tabIndex={0}
-            >
-              {opt.label}
+        <div className="header-right">
+          {!isConnected && !embedded && (
+            <button className="btn-putty" onClick={handlePuttyOpen} disabled={!consoleLink?.connectedRouter}>
+              🔌 PuTTY
             </button>
-          ))}
-          {/* Help (?) button always available */}
-          <button
-            className="menu-btn help-btn"
-            onClick={() => handleOptionClick('help-mark')}
-            disabled={!isConnected || awaitingEnter || !!showConfirm || !!showValueSelector}
-            role="menuitem"
-            aria-label="Ayuda contextual"
-          >
-            ?
-          </button>
+          )}
+          {!embedded && (
+            <button className="btn-close" onClick={onClose} aria-label="Cerrar terminal">×</button>
+          )}
         </div>
       </div>
+
+      {/* Connection status */}
+      {!isConnected && (
+        <div className="connection-banner">
+          ⚠️ Conexión interrumpida. {session.awaitingEnter ? 'Pulse Enter para continuar.' : 'Conecte el cable de consola.'}
+        </div>
+      )}
+
+      {/* Output area */}
+      <div className="terminal-output" ref={outputRef} role="log" aria-live="polite" aria-label="Salida del terminal">
+        {session.output.map((line: string, i: number) => (
+          <div key={i} className="output-line">{line}</div>
+        ))}
+        {session.awaitingEnter && <div className="output-line awaiting-enter">▌</div>}
+      </div>
+
+      {/* Current prompt line */}
+      <div className="prompt-line">
+        <span className="prompt">{prompt}</span>
+        {showValueSelector && (
+          <ValueSelector
+            items={showValueSelector.items}
+            onSelect={handleValueSelect}
+            onCancel={() => setShowValueSelector(null)}
+            label={showValueSelector.valueType === 'mask' ? `Máscara para ${showValueSelector.firstValue}` : 'Seleccione un valor'}
+          />
+        )}
+        {showConfirm && (
+          <ConfirmDialog
+            action={showConfirm}
+            onConfirm={() => handleOptionClick('confirm')}
+            onCancel={() => handleOptionClick('cancel')}
+          />
+        )}
+        {awaitingEnter && (
+          <span className="press-enter">[Pulse Enter]</span>
+        )}
+      </div>
+
+      {/* Menu buttons */}
+      <div className="terminal-menu" role="menu" aria-label="Comandos disponibles">
+        {menuOptions.map((opt, i) => (
+          <button
+            key={opt.id}
+            ref={i === 0 ? inputRef : undefined}
+            className="menu-btn"
+            onClick={() => handleOptionClick(opt.id)}
+            disabled={!isConnected || awaitingEnter || !!showConfirm || !!showValueSelector}
+            role="menuitem"
+            tabIndex={0}
+          >
+            {opt.label}
+          </button>
+        ))}
+        {/* Help (?) button always available */}
+        <button
+          className="menu-btn help-btn"
+          onClick={() => handleOptionClick('help-mark')}
+          disabled={!isConnected || awaitingEnter || !!showConfirm || !!showValueSelector}
+          role="menuitem"
+          aria-label="Ayuda contextual"
+        >
+          ?
+        </button>
+      </div>
+    </div>
+  );
+
+  if (embedded) {
+    return <>{terminalContent}</>;
+  }
+
+  return (
+    <div className="router-terminal-overlay" role="dialog" aria-modal="true" aria-label={`Terminal ${routerId} - ${session.mode}`}>
+      {terminalContent}
 
       {/* PuTTY Dialog */}
       {showPutty && (
@@ -367,11 +382,5 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({ action, onConfirm, onCanc
     </div>
   );
 };
-
-function handlePuttyClose() {
-  // This is a hack - in real code we'd use state
-  const overlay = document.querySelector('.putty-overlay');
-  if (overlay) (overlay as HTMLElement).style.display = 'none';
-}
 
 export default RouterTerminal;
