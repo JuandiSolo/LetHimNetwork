@@ -9,7 +9,6 @@ import { remainingCables } from '@core/cables';
 import type { CableType, PcId, RouterId } from '@core/types';
 import { PhaserGame } from './PhaserGame';
 import { PcTerminalView } from './PcTerminalView';
-import { RouterTerminal } from './RouterTerminal';
 
 const CABLES: { type: CableType; label: string; key: string }[] = [
   { type: 'straight', label: 'Directo', key: '1' },
@@ -42,7 +41,7 @@ export function LabShell() {
   if (phase !== 'LAB') return null;
   const left = remainingCables(cables);
 
-  // Find connected router for terminal
+  // Find connected router for terminal button
   const connectedRouter = consoleLink?.connectedRouter as RouterId | undefined;
   const hasActiveSession = connectedRouter && sessions[connectedRouter];
 
@@ -91,15 +90,9 @@ export function LabShell() {
       )}
       <div className='lab-canvas'><PhaserGame /></div>
 
-      {/* Terminal view - shows either PC terminal or Router terminal */}
+      {/* Terminal view - always shows PC terminal (which includes router panel when console connected) */}
       {view === 'TERMINAL' && (
-        <>
-          {hasActiveSession && connectedRouter ? (
-            <RouterTerminal routerId={connectedRouter} onClose={() => dispatch.openPc(activePc)} />
-          ) : (
-            <PcTerminalView lines={lines} setLines={setLines} />
-          )}
-        </>
+        <PcTerminalView lines={lines} setLines={setLines} />
       )}
     </div>
   );
